@@ -1,0 +1,2149 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>תבליט – שטח ישראל בתלת־ממד</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Hebrew:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link href="https://cdn.jsdelivr.net/npm/maplibre-gl@4.7.1/dist/maplibre-gl.css" rel="stylesheet">
+<script>
+  // Free hosts (like tiiny.host) add a bar at the bottom of the page: keep our controls above it
+  if (/(^|\.)tiiny\.(site|host)$/i.test(location.hostname)) document.documentElement.classList.add('host-bar');
+</script>
+<script src="https://cdn.jsdelivr.net/npm/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/maplibre-contour@0.1.0/dist/index.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/proj4@2.19.10/dist/proj4.js"></script>
+<style>
+:root {
+  --paper: #F1F3EC;
+  --paper-glass: rgba(241, 243, 236, 0.94);
+  --ink: #22261E;
+  --muted: #5F6656;
+  --rule: #D3D7C9;
+  --field: #FFFFFF;
+  --contour: #9A4E1B;
+  --contour-soft: rgba(154, 78, 27, 0.12);
+  --water: #2C6A87;
+  --danger: #A3321F;
+  --host-bar: 0px;
+  color-scheme: light;
+  box-sizing: border-box;
+  padding-top: env(safe-area-inset-top, 0px);
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --paper: #1B1E18;
+    --paper-glass: rgba(27, 30, 24, 0.94);
+    --ink: #E6E8DF;
+    --muted: #A3A995;
+    --rule: #363B2F;
+    --field: #24281F;
+    --contour: #E28B4E;
+    --contour-soft: rgba(226, 139, 78, 0.16);
+    --water: #7FB6CF;
+    --danger: #F08A73;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --paper: #1B1E18; --paper-glass: rgba(27, 30, 24, 0.94); --ink: #E6E8DF; --muted: #A3A995;
+  --rule: #363B2F; --field: #24281F; --contour: #E28B4E; --contour-soft: rgba(226, 139, 78, 0.16);
+  --water: #7FB6CF; --danger: #F08A73; color-scheme: dark;
+}
+*, *::before, *::after { box-sizing: inherit; }
+html.host-bar { --host-bar: 72px; }
+.maplibregl-ctrl-bottom-left, .maplibregl-ctrl-bottom-right { bottom: var(--host-bar); }
+html, body { height: 100%; margin: 0; }
+html { scroll-padding-top: env(safe-area-inset-top, 0px); }
+body {
+  background: var(--paper);
+  color: var(--ink);
+  font-family: "IBM Plex Sans Hebrew", "Segoe UI", "Arial Hebrew", Arial, sans-serif;
+  font-size: 15px;
+  line-height: 1.5;
+  overflow: hidden;
+}
+#map { position: fixed; inset: 0; }
+
+/* ---------- panel ---------- */
+.panel {
+  position: fixed;
+  top: calc(env(safe-area-inset-top, 0px) + 12px);
+  right: 12px;
+  bottom: calc(env(safe-area-inset-bottom, 0px) + 12px + var(--host-bar));
+  width: 340px;
+  background: var(--paper-glass);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  border: 1px solid var(--rule);
+  border-radius: 14px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  z-index: 5;
+  box-shadow: 0 10px 30px rgba(20, 24, 16, 0.18);
+}
+.masthead {
+  position: relative;
+  padding: 22px 22px 18px;
+  border-bottom: 1px solid var(--rule);
+  overflow: hidden;
+}
+.masthead svg { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+.masthead svg path { fill: none; stroke: var(--contour); }
+.masthead h1 {
+  position: relative;
+  margin: 0;
+  font-size: 40px;
+  line-height: 1;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+.masthead p { position: relative; margin: 8px 0 0; color: var(--muted); font-size: 14px; }
+
+section { padding: 16px 22px 18px; border-bottom: 1px solid var(--rule); }
+section:last-of-type { border-bottom: 0; }
+h2 { margin: 0 0 10px; font-size: 15px; font-weight: 600; }
+.hint { margin: 6px 0 0; color: var(--muted); font-size: 13px; line-height: 1.55; }
+
+.search { display: flex; gap: 6px; }
+input[type="search"], input[type="number"], select {
+  flex: 1;
+  min-width: 0;
+  font: inherit;
+  color: var(--ink);
+  background: var(--field);
+  border: 1px solid var(--rule);
+  border-radius: 8px;
+  padding: 7px 10px;
+}
+input[type="number"] { direction: ltr; text-align: left; font-variant-numeric: tabular-nums; }
+button {
+  font: inherit;
+  font-weight: 500;
+  color: var(--ink);
+  background: var(--field);
+  border: 1px solid var(--rule);
+  border-radius: 8px;
+  padding: 7px 12px;
+  cursor: pointer;
+}
+button:hover { border-color: var(--contour); }
+button.primary { background: var(--contour); border-color: var(--contour); color: #fff; }
+:root:not([data-theme="light"]) button.primary { color: #fff; }
+button.danger { color: var(--danger); }
+button[aria-pressed="true"] { background: var(--contour-soft); border-color: var(--contour); }
+:focus-visible { outline: 2px solid var(--water); outline-offset: 2px; }
+
+.results { list-style: none; margin: 8px 0 0; padding: 0; }
+.results button { width: 100%; text-align: right; border: 0; border-bottom: 1px solid var(--rule); border-radius: 0; background: transparent; padding: 8px 2px; font-weight: 400; }
+.results button:hover { color: var(--contour); }
+
+.places { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 12px; }
+.places button { padding: 5px 11px; border-radius: 999px; font-size: 14px; }
+
+.bases { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+.bases label {
+  display: flex; align-items: center; gap: 8px;
+  border: 1px solid var(--rule); border-radius: 8px;
+  padding: 7px 10px; cursor: pointer; background: var(--field); font-size: 14px;
+}
+.bases input { accent-color: var(--contour); margin: 0; }
+.bases label:has(input:checked) { border-color: var(--contour); background: var(--contour-soft); }
+
+.row { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: 12px; }
+.row > span { font-size: 14px; }
+.row select { flex: 0 0 auto; width: 120px; padding: 4px 8px; }
+.switch { position: relative; width: 38px; height: 22px; flex: 0 0 auto; }
+.switch input { position: absolute; opacity: 0; inset: 0; margin: 0; cursor: pointer; z-index: 1; }
+.switch i { position: absolute; inset: 0; border-radius: 99px; background: var(--rule); transition: background .15s; }
+.switch i::after { content: ""; position: absolute; top: 3px; right: 3px; width: 16px; height: 16px; border-radius: 50%; background: #fff; transition: transform .15s; box-shadow: 0 1px 2px rgba(0,0,0,.25); }
+.switch input:checked + i { background: var(--contour); }
+.switch input:checked + i::after { transform: translateX(-16px); }
+.switch input:focus-visible + i { outline: 2px solid var(--water); outline-offset: 2px; }
+
+.slider { margin-top: 12px; }
+.slider .top { display: flex; justify-content: space-between; font-size: 14px; }
+.slider output { font-variant-numeric: tabular-nums; color: var(--muted); direction: ltr; }
+input[type="range"] { width: 100%; accent-color: var(--contour); margin: 6px 0 0; }
+
+.drop {
+  display: block;
+  border: 1.5px dashed var(--rule);
+  border-radius: 10px;
+  padding: 16px 14px;
+  text-align: center;
+  cursor: pointer;
+  color: var(--muted);
+  font-size: 14px;
+}
+.drop strong { display: block; color: var(--ink); font-weight: 600; margin-bottom: 2px; }
+.drop.over, .drop:hover { border-color: var(--contour); background: var(--contour-soft); }
+.drop input { position: absolute; width: 1px; height: 1px; opacity: 0; }
+
+.overlay-tools[hidden], .itm-form[hidden], .profile-out[hidden], .page-pick[hidden] { display: none; }
+.file-name { font-weight: 600; font-size: 14px; word-break: break-all; margin: 12px 0 0; }
+.btns { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+.itm-form { margin-top: 12px; padding: 12px; border: 1px solid var(--rule); border-radius: 10px; background: var(--field); }
+.itm-form fieldset { border: 0; padding: 0; margin: 10px 0 0; }
+.itm-form legend { font-size: 13px; color: var(--muted); padding: 0; margin-bottom: 4px; }
+.pair { display: flex; gap: 6px; }
+.pair label { flex: 1; font-size: 12px; color: var(--muted); }
+.pair input { width: 100%; margin-top: 2px; }
+.itm-form .row { margin-top: 0; }
+
+.profile-out { margin-top: 12px; }
+#profileCanvas, #losCanvas { width: 100%; height: 150px; display: block; border: 1px solid var(--rule); border-radius: 8px; background: var(--field); touch-action: none; }
+.stats { display: grid; grid-template-columns: 1fr 1fr; gap: 4px 12px; margin: 10px 0 0; font-size: 13px; }
+.stats dt { color: var(--muted); }
+.stats dd { margin: 0; font-weight: 600; font-variant-numeric: tabular-nums; }
+.stats div { display: flex; justify-content: space-between; gap: 8px; }
+
+.credits { padding: 14px 22px 20px; color: var(--muted); font-size: 12px; }
+
+/* ---------- map chrome ---------- */
+.status {
+  background: var(--paper-glass) !important;
+  color: var(--ink);
+  border-radius: 8px !important;
+  padding: 6px 10px;
+  font-size: 12.5px;
+  line-height: 1.45;
+  font-variant-numeric: tabular-nums;
+  direction: rtl;
+  min-width: 230px;
+  box-shadow: 0 2px 8px rgba(0,0,0,.18) !important;
+}
+.status b { font-weight: 600; }
+.status .diag { margin-top: 3px; padding-top: 3px; border-top: 1px solid var(--rule); font-weight: 600; }
+.status .diag[data-state="bad"] { color: var(--danger); }
+.status .diag[data-state="ok"] { color: var(--contour); }
+.status .ltr { direction: ltr; unicode-bidi: isolate; display: inline-block; }
+.maplibregl-ctrl-scale { background: var(--paper-glass); color: var(--ink); border-color: var(--ink); }
+.maplibregl-ctrl-group { background: var(--paper-glass); }
+:root:not([data-theme="light"]) .maplibregl-ctrl-group button .maplibregl-ctrl-icon { filter: none; }
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .maplibregl-ctrl-group button .maplibregl-ctrl-icon { filter: invert(0.9); }
+}
+
+.handle {
+  width: 18px; height: 18px; border-radius: 50%;
+  background: #fff; border: 3px solid var(--contour);
+  box-shadow: 0 1px 4px rgba(0,0,0,.45);
+  cursor: grab;
+}
+.handle.center { width: 26px; height: 26px; border-radius: 6px; display: grid; place-items: center; }
+.handle.center::after { content: ""; width: 10px; height: 10px; border: 2px solid var(--contour); border-radius: 50%; }
+.pin {
+  width: 26px; height: 26px; border-radius: 50%;
+  background: var(--contour); color: #fff; font-weight: 700; font-size: 13px;
+  display: grid; place-items: center; border: 2px solid #fff;
+  box-shadow: 0 1px 4px rgba(0,0,0,.45);
+}
+.stream-popup .maplibregl-popup-content { background: var(--paper); color: var(--ink); border-radius: 10px; padding: 12px 14px 10px; direction: rtl; text-align: right; font-family: inherit; box-shadow: 0 6px 20px rgba(0,0,0,.25); }
+.stream-popup .maplibregl-popup-tip { border-top-color: var(--paper); border-bottom-color: var(--paper); }
+.stream-popup .maplibregl-popup-close-button { left: 4px; right: auto; font-size: 18px; color: var(--muted); }
+.sp h3 { margin: 0 0 2px 18px; font-size: 16px; font-weight: 700; }
+.sp p { margin: 4px 0 0; font-size: 13.5px; line-height: 1.5; }
+.sp .sp-kind { color: var(--water); font-weight: 500; margin-top: 0; }
+.sp .sp-note { color: var(--muted); font-size: 12.5px; }
+.pin.los { background: var(--water); cursor: grab; }
+.pin.block { background: #D64545; font-size: 14px; }
+.verdict { margin: 12px 0 8px; font-size: 16px; font-weight: 700; }
+.verdict[data-state="ok"] { color: #2A9A5D; }
+.verdict[data-state="bad"] { color: var(--danger); }
+.los-heights { margin-bottom: 4px; }
+.los-az { margin: -4px 0 10px; font-size: 15px; }
+.los-az b { font-size: 20px; font-variant-numeric: tabular-nums; }
+.legend { display: flex; gap: 16px; margin-top: 12px; font-size: 13.5px; }
+.legend span { display: inline-flex; align-items: center; gap: 6px; }
+.sw { display: inline-block; width: 22px; border-radius: 3px; }
+.legend.ramp { align-items: center; gap: 8px; font-size: 13px; color: var(--muted); }
+.sw.ramp-ridge { flex: 1; height: 7px; border-radius: 0; background: linear-gradient(to left, #F7887F, #E0353A 50%, #8E0B12); clip-path: polygon(0 0, 100% 50%, 0 100%); }
+.cursor-dot { width: 12px; height: 12px; border-radius: 50%; background: var(--water); border: 2px solid #fff; box-shadow: 0 0 0 1px rgba(0,0,0,.3); }
+
+.toast {
+  position: fixed; z-index: 20;
+  left: 50%; top: calc(env(safe-area-inset-top, 0px) + 16px);
+  transform: translateX(-50%);
+  background: var(--ink); color: var(--paper);
+  padding: 9px 16px; border-radius: 8px; font-size: 14px;
+  max-width: min(90vw, 460px); text-align: center;
+  opacity: 0; pointer-events: none; transition: opacity .2s;
+}
+.toast.show { opacity: 1; }
+
+.banner {
+  position: fixed; z-index: 30;
+  top: calc(env(safe-area-inset-top, 0px) + 10px); left: 10px; right: 10px;
+  max-width: 560px; margin-inline: auto;
+  background: var(--paper); color: var(--ink);
+  border: 2px solid var(--danger); border-radius: 12px;
+  padding: 14px 16px; font-size: 14px; line-height: 1.55;
+  box-shadow: 0 8px 24px rgba(0,0,0,.3);
+}
+.banner[hidden] { display: none; }
+.banner strong { display: block; color: var(--danger); font-size: 15px; margin-bottom: 4px; }
+.banner button { margin-top: 10px; }
+.fab { display: none; }
+
+/* ---------- small screens: bottom sheet ---------- */
+@media (max-width: 760px) {
+  .panel {
+    top: auto; left: 0; right: 0; bottom: var(--host-bar);
+    width: auto; max-height: calc(70% - var(--host-bar));
+    border-radius: 16px 16px 0 0;
+    border-bottom: 0;
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+    transform: translateY(105%);
+    transition: transform .25s ease;
+  }
+  .panel.open { transform: none; }
+  .masthead { padding: 16px 20px 14px; }
+  .masthead h1 { font-size: 30px; }
+  .fab {
+    display: block; position: fixed; z-index: 6;
+    right: 12px; bottom: calc(env(safe-area-inset-bottom, 0px) + 12px + var(--host-bar));
+    background: var(--contour); border-color: var(--contour); color: #fff;
+    padding: 10px 16px; border-radius: 999px; box-shadow: 0 4px 14px rgba(0,0,0,.3);
+  }
+  .panel.open ~ .fab { display: none; }
+  .status { min-width: 0; font-size: 11.5px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .panel, .switch i, .switch i::after, .toast { transition: none; }
+}
+</style>
+</head>
+<body>
+<div id="map" role="application" aria-label="מפה תלת־ממדית"></div>
+
+<aside class="panel" id="panel">
+  <header class="masthead">
+    <svg viewBox="0 0 340 110" preserveAspectRatio="none" aria-hidden="true">
+      <path d="M-10 92 C 60 70, 110 98, 170 80 S 290 52, 360 70" stroke-width="1" opacity=".35"/>
+      <path d="M-10 78 C 70 58, 120 84, 180 66 S 290 38, 360 54" stroke-width="1.6" opacity=".45"/>
+      <path d="M40 60 C 90 40, 140 62, 190 50 S 280 26, 330 38" stroke-width="1" opacity=".3"/>
+      <path d="M110 44 C 150 30, 190 46, 230 36 S 290 20, 320 26" stroke-width="1" opacity=".25"/>
+      <path d="M190 30 C 220 20, 250 30, 280 22" stroke-width="1" opacity=".2"/>
+    </svg>
+    <h1>תבליט</h1>
+    <p>שטח ישראל בתלת־ממד, עם המפות שלך מעליו</p>
+  </header>
+
+  <section aria-labelledby="h-go">
+    <h2 id="h-go">אזור</h2>
+    <form class="search" id="searchForm">
+      <input type="search" id="searchInput" placeholder="שם מקום, הר או נחל" aria-label="חיפוש מקום">
+      <button type="submit">חיפוש</button>
+    </form>
+    <ul class="results" id="results"></ul>
+    <div class="places" id="places"></div>
+  </section>
+
+  <section aria-labelledby="h-view">
+    <h2 id="h-view">זווית מבט</h2>
+    <div class="slider" style="margin-top:0">
+      <div class="top"><label for="pitch">הטיה</label><output id="pitchOut">62°</output></div>
+      <input type="range" id="pitch" min="0" max="85" step="1" value="62">
+    </div>
+    <div class="btns">
+      <button type="button" id="btnSide">מבט מהצד</button>
+      <button type="button" id="btnTop">מבט מלמעלה</button>
+      <button type="button" id="btnRotL" aria-label="סיבוב שמאלה">↺ סיבוב</button>
+      <button type="button" id="btnRotR" aria-label="סיבוב ימינה">סיבוב ↻</button>
+    </div>
+    <p class="hint">בטלפון: גרירה בשתי אצבעות למעלה ולמטה מטה את המבט, וסיבוב של שתי אצבעות מסובב את המפה.</p>
+  </section>
+
+  <section aria-labelledby="h-layers">
+    <h2 id="h-layers">רקע</h2>
+    <div class="bases" id="bases"></div>
+    <div class="row"><span>תלת־ממד</span><label class="switch"><input type="checkbox" id="t3d" checked aria-label="תלת־ממד"><i></i></label></div>
+    <div class="row"><span>קווי גובה</span><label class="switch"><input type="checkbox" id="tContours" checked aria-label="קווי גובה"><i></i></label></div>
+    <div class="row">
+      <span>מרווח בין קווים</span>
+      <select id="interval" aria-label="מרווח קווי גובה">
+        <option value="auto">לפי זום</option>
+        <option value="10">10 מ׳</option>
+        <option value="20">20 מ׳</option>
+        <option value="50">50 מ׳</option>
+        <option value="100">100 מ׳</option>
+      </select>
+    </div>
+    <div class="row"><span>הצללת תבליט</span><label class="switch"><input type="checkbox" id="tHill" checked aria-label="הצללת תבליט"><i></i></label></div>
+    <div class="slider">
+      <div class="top"><label for="exag">הגזמה אנכית</label><output id="exagOut">×2.0</output></div>
+      <input type="range" id="exag" min="1" max="6" step="0.1" value="2">
+    </div>
+  </section>
+
+  <section aria-labelledby="h-ridges">
+    <h2 id="h-ridges">רכסים ושלוחות</h2>
+    <div class="row" style="margin-top:0"><span>קווי רכס ושלוחות</span><label class="switch"><input type="checkbox" id="tRidges" aria-label="קווי רכס ושלוחות"><i></i></label></div>
+    <div class="row">
+      <span>רמת פירוט</span>
+      <select id="ridgeDetail" aria-label="רמת פירוט">
+        <option value="low">רכסים ראשיים</option>
+        <option value="mid" selected>רכסים ושלוחות</option>
+        <option value="high">פירוט גבוה</option>
+      </select>
+    </div>
+    <div class="legend ramp" aria-hidden="true">
+      <span>שלוחה קטנה</span><i class="sw ramp-ridge"></i><span>רכס ראשי</span>
+    </div>
+    <p class="hint" id="ridgeStatus">מחושב מנתוני הגובה לאזור שעל המסך.</p>
+  </section>
+
+  <section aria-labelledby="h-streams">
+    <h2 id="h-streams">נחלים</h2>
+    <div class="row" style="margin-top:0"><span>נחלים וכיוון זרימה</span><label class="switch"><input type="checkbox" id="tStreams" aria-label="נחלים וכיוון זרימה"><i></i></label></div>
+    <div class="row"><span>הנפשת זרימה</span><label class="switch"><input type="checkbox" id="tFlowAnim" checked aria-label="הנפשת זרימה"><i></i></label></div>
+    <div class="row"><span>ערוצים מחושבים מהגובה</span><label class="switch"><input type="checkbox" id="tChannels" aria-label="ערוצים מחושבים מהגובה"><i></i></label></div>
+    <div class="row">
+      <span>פירוט ערוצים</span>
+      <select id="channelDetail" aria-label="פירוט ערוצים">
+        <option value="low">ערוצים גדולים</option>
+        <option value="mid" selected>בינוני</option>
+        <option value="high">פירוט גבוה</option>
+      </select>
+    </div>
+    <p class="hint" id="channelStatus">משלים נחלים שחסרים במפה, לפי צורת השטח.</p>
+    <p class="hint" id="streamsStatus">החצים והקווים הנעים מראים לאן המים זורמים. לחיצה על נחל מסמנת בצהוב לאן הוא ממשיך.</p>
+  </section>
+
+  <section aria-labelledby="h-mine">
+    <h2 id="h-mine">המפה שלי</h2>
+    <label class="drop" id="drop">
+      <strong>העלאת מפה או תצ״א</strong>
+      תמונה (JPG, PNG) או PDF – גרירה לכאן או לחיצה
+      <input type="file" id="fileInput" accept="image/*,.pdf,application/pdf">
+    </label>
+    <div class="overlay-tools" id="overlayTools" hidden>
+      <p class="file-name" id="fileName"></p>
+      <div class="row page-pick" id="pagePick" hidden>
+        <span>עמוד ב־PDF</span>
+        <select id="pageSelect" aria-label="עמוד"></select>
+      </div>
+      <div class="slider">
+        <div class="top"><label for="opacity">אטימות</label><output id="opacityOut">80%</output></div>
+        <input type="range" id="opacity" min="0" max="1" step="0.05" value="0.8">
+      </div>
+      <div class="btns">
+        <button type="button" id="btnAnchor" aria-pressed="false">גרירת פינות</button>
+        <button type="button" id="btnCoords" aria-pressed="false">לפי קואורדינטות</button>
+        <button type="button" id="btnFit">פריסה על המסך</button>
+        <button type="button" class="danger" id="btnRemove">הסרה</button>
+      </div>
+      <p class="hint" id="anchorHint" hidden>גררו כל פינה לנקודה מוכרת בשטח, או את הריבוע שבמרכז כדי להזיז את כל המפה. אטימות נמוכה עוזרת לראות את הרקע מתחת.</p>
+      <form class="itm-form" id="itmForm" hidden>
+        <div class="row">
+          <span>מערכת</span>
+          <select id="crs" aria-label="מערכת קואורדינטות">
+            <option value="itm">רשת ישראל (ITM)</option>
+            <option value="wgs">קווי אורך ורוחב</option>
+          </select>
+        </div>
+        <fieldset>
+          <legend>פינה עליונה־שמאלית (צפון־מערב)</legend>
+          <div class="pair">
+            <label><span class="lx">מזרח X</span><input type="number" step="any" id="x1" required></label>
+            <label><span class="ly">צפון Y</span><input type="number" step="any" id="y1" required></label>
+          </div>
+        </fieldset>
+        <fieldset>
+          <legend>פינה תחתונה־ימנית (דרום־מזרח)</legend>
+          <div class="pair">
+            <label><span class="lx">מזרח X</span><input type="number" step="any" id="x2" required></label>
+            <label><span class="ly">צפון Y</span><input type="number" step="any" id="y2" required></label>
+          </div>
+        </fieldset>
+        <div class="btns"><button type="submit" class="primary">מיקום המפה</button><button type="button" id="btnFillCoords">מילוי מהמיקום הנוכחי</button></div>
+        <p class="hint">את הקואורדינטות של פינות המפה אפשר לקרוא ממסגרת המפה המודפסת. ברשת ישראל החדשה X הוא בדרך כלל בין 120,000 ל־290,000.</p>
+      </form>
+    </div>
+  </section>
+
+  <section aria-labelledby="h-prof">
+    <h2 id="h-prof">חתך גובה</h2>
+    <div class="btns" style="margin-top:0">
+      <button type="button" id="btnProfile" aria-pressed="false">סימון שתי נקודות</button>
+      <button type="button" id="btnProfileClear" hidden>ניקוי</button>
+    </div>
+    <p class="hint" id="profileHint">לחצו על שתי נקודות במפה כדי לראות את פרופיל הגובה ביניהן.</p>
+    <div class="profile-out" id="profileOut" hidden>
+      <canvas id="profileCanvas" aria-label="גרף פרופיל גובה"></canvas>
+      <dl class="stats" id="stats"></dl>
+    </div>
+  </section>
+
+  <section aria-labelledby="h-los">
+    <h2 id="h-los">קו ראייה</h2>
+    <div class="pair los-heights">
+      <label>גובה הצופה מעל הקרקע (מ׳)<input type="number" id="losH1" value="1.7" step="0.1" min="0"></label>
+      <label>גובה המטרה מעל הקרקע (מ׳)<input type="number" id="losH2" value="1.7" step="0.1" min="0"></label>
+    </div>
+    <div class="btns">
+      <button type="button" id="btnLos" aria-pressed="false">סימון צופה ומטרה</button>
+      <button type="button" id="btnLosClear" hidden>ניקוי</button>
+    </div>
+    <p class="hint" id="losHint">לחצו במפה על מיקום הצופה ואחר כך על המטרה. אחר כך אפשר לגרור כל אחת מהנקודות.</p>
+    <div class="profile-out" id="losOut" hidden>
+      <p class="verdict" id="losVerdict" role="status"></p>
+      <p class="los-az" id="losAz"></p>
+      <canvas id="losCanvas" aria-label="גרף קו ראייה"></canvas>
+      <dl class="stats" id="losStats"></dl>
+      <p class="hint" id="losNote"></p>
+      <p class="hint">האזימוט נמדד מהצופה אל המטרה, ביחס לצפון האמיתי. במצפן בישראל הקריאה נמוכה בכ־5° בגלל הסטייה המגנטית.</p>
+      <p class="hint">החישוב כולל את עקמומיות כדור הארץ ושבירת האור באטמוספרה, אבל לא בניינים, עצים או צמחייה.</p>
+    </div>
+  </section>
+
+  <div class="credits">נתוני גובה: Terrain Tiles (AWS) ברזולוציה של כ־30 מטר. שכבות רקע: Esri, OpenTopoMap, Israel Hiking Map, OpenStreetMap. נחלים: OpenStreetMap.</div>
+</aside>
+<button type="button" class="fab" id="fab">שכבות וכלים</button>
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+<div class="banner" id="banner" role="alert" hidden>
+  <strong>התלת־ממד לא יכול לפעול כשהקובץ נפתח כך</strong>
+  <span id="bannerText">הקובץ נפתח ישירות מתוך אפליקציה (למשל WhatsApp או מנהל הקבצים), והדפדפן חוסם במצב הזה את החישובים ברקע שבונים את התבליט וקווי הגובה. התמונות נטענות, אבל השטח נשאר שטוח. כדי שזה יעבוד, פתחו את הקובץ מכתובת אינטרנט (אחרי העלאה לאתר אחסון) או במחשב.</span>
+  <div><button type="button" id="bannerClose">הבנתי</button></div>
+</div>
+
+<script>
+(function () {
+  'use strict';
+
+  // ---------- setup ----------
+  const $ = (id) => document.getElementById(id);
+  const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const ISRAEL_BOUNDS = [[33.6, 29.0], [36.6, 33.9]];
+  const DEM_TILES = 'https://elevation-tiles-prod.s3.amazonaws.com/terrarium/{z}/{x}/{y}.png';
+
+  proj4.defs('EPSG:2039', '+proj=tmerc +lat_0=31.7343936111111 +lon_0=35.2045169444444 +k=1.0000067 +x_0=219529.584 +y_0=626907.39 +ellps=GRS80 +towgs84=-24.0024,-17.1032,-17.8444,-0.33077,-1.85269,1.66969,5.4248 +units=m +no_defs');
+  const toITM = (lng, lat) => proj4('EPSG:4326', 'EPSG:2039', [lng, lat]);
+  const fromITM = (x, y) => proj4('EPSG:2039', 'EPSG:4326', [x, y]);
+
+  let toastTimer;
+  function toast(msg, ms = 3200) {
+    const t = $('toast');
+    t.textContent = msg;
+    t.classList.add('show');
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => t.classList.remove('show'), ms);
+  }
+
+  const demSource = new mlcontour.DemSource({ url: DEM_TILES, encoding: 'terrarium', maxzoom: 13, worker: true });
+  demSource.setupMaplibre(maplibregl);
+
+  const BASES = {
+    ortho: {
+      label: 'תצ״א', dark: true, maxzoom: 19,
+      tiles: ['https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}'],
+      attribution: 'Imagery © Esri, Maxar, Earthstar Geographics'
+    },
+    topo: {
+      label: 'טופוגרפית', dark: false, maxzoom: 17,
+      tiles: ['a', 'b', 'c'].map((s) => `https://${s}.tile.opentopomap.org/{z}/{x}/{y}.png`),
+      attribution: '© OpenStreetMap, SRTM | © OpenTopoMap (CC-BY-SA)'
+    },
+    trails: {
+      label: 'מפת שבילים', dark: false, maxzoom: 16,
+      tiles: ['https://israelhiking.osm.org.il/Hebrew/Tiles/{z}/{x}/{y}.png'],
+      attribution: '© Israel Hiking Map, CC BY-NC-SA | © OpenStreetMap'
+    },
+    streets: {
+      label: 'רחובות', dark: false, maxzoom: 19,
+      tiles: ['https://tile.openstreetmap.org/{z}/{x}/{y}.png'],
+      attribution: '© OpenStreetMap contributors'
+    }
+  };
+  let currentBase = 'ortho';
+
+  const CONTOUR_PRESETS = {
+    auto: { 9: [500, 1000], 10: [200, 1000], 11: [100, 500], 12: [50, 250], 13: [20, 100], 14: [10, 50] }
+  };
+  function contourUrl(interval) {
+    let thresholds = CONTOUR_PRESETS.auto;
+    if (interval !== 'auto') {
+      const v = Number(interval);
+      thresholds = { 9: [500, 1000], 11: [v, v * 5] };
+    }
+    return demSource.contourProtocolUrl({
+      thresholds, contourLayer: 'contours', elevationKey: 'ele', levelKey: 'level', extent: 4096, buffer: 1
+    });
+  }
+
+  const sources = {
+    terrainSource: { type: 'raster-dem', encoding: 'terrarium', tiles: [DEM_TILES], tileSize: 256, maxzoom: 14, attribution: 'גובה: Terrain Tiles (AWS / Mapzen)' },
+    hillSource: { type: 'raster-dem', encoding: 'terrarium', tiles: [DEM_TILES], tileSize: 256, maxzoom: 14 },
+    contours: { type: 'vector', tiles: [contourUrl('auto')], maxzoom: 15 }
+  };
+  const layers = [{ id: 'bg', type: 'background', paint: { 'background-color': '#d9dccf' } }];
+  for (const [key, b] of Object.entries(BASES)) {
+    sources['base-' + key] = { type: 'raster', tiles: b.tiles, tileSize: 256, maxzoom: b.maxzoom, attribution: b.attribution };
+    layers.push({ id: 'base-' + key, type: 'raster', source: 'base-' + key, layout: { visibility: key === currentBase ? 'visible' : 'none' } });
+  }
+  layers.push(
+    { id: 'hillshade', type: 'hillshade', source: 'hillSource', layout: { visibility: 'visible' },
+      paint: { 'hillshade-shadow-color': '#2a2219', 'hillshade-exaggeration': 0.6, 'hillshade-highlight-color': 'rgba(255,255,255,0.5)', 'hillshade-illumination-direction': 315 } },
+    { id: 'contour-lines', type: 'line', source: 'contours', 'source-layer': 'contours',
+      paint: { 'line-color': '#F3B47E', 'line-opacity': 0.85, 'line-width': ['match', ['get', 'level'], 1, 1.4, 0.6] } },
+    { id: 'contour-labels', type: 'symbol', source: 'contours', 'source-layer': 'contours',
+      filter: ['>', ['get', 'level'], 0],
+      layout: { 'symbol-placement': 'line', 'text-size': 11, 'text-field': ['to-string', ['get', 'ele']], 'text-font': ['Noto Sans Bold'] },
+      paint: { 'text-color': '#FFE3C7', 'text-halo-color': 'rgba(40,25,10,0.85)', 'text-halo-width': 1.2 } }
+  );
+
+  const map = new maplibregl.Map({
+    container: 'map',
+    style: {
+      version: 8,
+      glyphs: 'https://tiles.openfreemap.org/fonts/{fontstack}/{range}.pbf',
+      sources, layers,
+      terrain: { source: 'terrainSource', exaggeration: 2 },
+      sky: {
+        'sky-color': '#9CC0D9', 'horizon-color': '#E4ECEF', 'fog-color': '#E4ECEF',
+        'sky-horizon-blend': 0.5, 'horizon-fog-blend': 0.7, 'fog-ground-blend': 0.85,
+        'atmosphere-blend': ['interpolate', ['linear'], ['zoom'], 0, 1, 10, 1, 12, 0]
+      }
+    },
+    center: [35.33, 31.47], zoom: 10.2, pitch: 62, bearing: 75,
+    maxPitch: 85,
+    maxBounds: ISRAEL_BOUNDS,
+    attributionControl: { compact: true },
+    hash: false
+  });
+
+  map.addControl(new maplibregl.NavigationControl({ visualizePitch: true }), 'top-left');
+  map.addControl(new maplibregl.ScaleControl({ unit: 'metric' }), 'bottom-left');
+
+  class StatusControl {
+    onAdd() {
+      this.el = document.createElement('div');
+      this.el.className = 'maplibregl-ctrl status';
+      this.pos = document.createElement('div');
+      this.pos.textContent = 'לחצו על המפה כדי לראות מיקום וגובה';
+      this.diag = document.createElement('div');
+      this.diag.className = 'diag';
+      this.diag.textContent = 'תלת־ממד: בודק…';
+      this.el.append(this.pos, this.diag);
+      return this.el;
+    }
+    onRemove() { this.el.remove(); }
+  }
+  const status = new StatusControl();
+  map.addControl(status, 'bottom-left');
+
+  // ---------- source errors ----------
+  const errShown = {};
+  map.on('error', (e) => {
+    const id = e && e.sourceId;
+    if (!id || errShown[id]) return;
+    errShown[id] = true;
+    if (id.startsWith('base-')) toast(`השכבה „${BASES[id.slice(5)].label}“ לא נטענת כרגע. אפשר לבחור רקע אחר.`, 4500);
+    else if (id === 'terrainSource' || id === 'hillSource' || id === 'contours') toast('נתוני הגובה לא נטענים. בדקו את החיבור לאינטרנט.', 4500);
+  });
+
+  // ---------- base layers ----------
+  function contourColorsFor(base) {
+    if (BASES[base].dark) {
+      map.setPaintProperty('contour-lines', 'line-color', '#F3B47E');
+      map.setPaintProperty('contour-labels', 'text-color', '#FFE3C7');
+      map.setPaintProperty('contour-labels', 'text-halo-color', 'rgba(40,25,10,0.85)');
+    } else {
+      map.setPaintProperty('contour-lines', 'line-color', '#9A4E1B');
+      map.setPaintProperty('contour-labels', 'text-color', '#7A3A10');
+      map.setPaintProperty('contour-labels', 'text-halo-color', 'rgba(255,255,255,0.9)');
+    }
+    streamColorsFor(base);
+  }
+  const basesEl = $('bases');
+  for (const [key, b] of Object.entries(BASES)) {
+    const lab = document.createElement('label');
+    lab.innerHTML = `<input type="radio" name="base" value="${key}" ${key === currentBase ? 'checked' : ''}><span>${b.label}</span>`;
+    basesEl.appendChild(lab);
+  }
+  basesEl.addEventListener('change', (e) => {
+    const key = e.target.value;
+    if (!BASES[key]) return;
+    for (const k of Object.keys(BASES)) map.setLayoutProperty('base-' + k, 'visibility', k === key ? 'visible' : 'none');
+    currentBase = key;
+    contourColorsFor(key);
+  });
+
+  // ---------- terrain controls ----------
+  let exaggeration = 2;
+  function apply3D() {
+    map.setTerrain($('t3d').checked ? { source: 'terrainSource', exaggeration } : null);
+  }
+  $('t3d').addEventListener('change', () => {
+    apply3D();
+    if (!$('t3d').checked) map.easeTo({ pitch: 0, duration: reduceMotion ? 0 : 600 });
+    else if (map.getPitch() < 30) map.easeTo({ pitch: 60, duration: reduceMotion ? 0 : 800 });
+  });
+  $('exag').addEventListener('input', (e) => {
+    exaggeration = Number(e.target.value);
+    $('exagOut').textContent = '×' + exaggeration.toFixed(1);
+    if ($('t3d').checked) apply3D();
+  });
+  $('tContours').addEventListener('change', (e) => {
+    const v = e.target.checked ? 'visible' : 'none';
+    map.setLayoutProperty('contour-lines', 'visibility', v);
+    map.setLayoutProperty('contour-labels', 'visibility', v);
+  });
+  $('interval').addEventListener('change', (e) => {
+    map.getSource('contours').setTiles([contourUrl(e.target.value)]);
+    if (e.target.value === '10' && map.getZoom() < 12) toast('קווים כל 10 מ׳ מופיעים מזום קרוב יותר');
+  });
+  $('tHill').addEventListener('change', (e) => map.setLayoutProperty('hillshade', 'visibility', e.target.checked ? 'visible' : 'none'));
+
+  // ---------- view angle ----------
+  const pitchEl = $('pitch');
+  function syncPitch() {
+    const p = Math.round(map.getPitch());
+    pitchEl.value = p;
+    $('pitchOut').textContent = p + '°';
+  }
+  map.on('pitch', syncPitch);
+  pitchEl.addEventListener('input', () => {
+    if (!$('t3d').checked && Number(pitchEl.value) > 0) { $('t3d').checked = true; apply3D(); }
+    map.setPitch(Number(pitchEl.value));
+  });
+  const ease = (o) => map.easeTo({ ...o, duration: reduceMotion ? 0 : 700 });
+  $('btnSide').addEventListener('click', () => {
+    if (!$('t3d').checked) { $('t3d').checked = true; apply3D(); }
+    ease({ pitch: 76 });
+  });
+  $('btnTop').addEventListener('click', () => ease({ pitch: 0 }));
+  $('btnRotL').addEventListener('click', () => ease({ bearing: map.getBearing() - 45 }));
+  $('btnRotR').addEventListener('click', () => ease({ bearing: map.getBearing() + 45 }));
+
+  // ---------- live 3D diagnostic ----------
+  let diagSeq = 0;
+  async function updateDiag() {
+    const seq = ++diagSeq;
+    const d = status.diag;
+    if (!map.getTerrain()) { d.textContent = 'תלת־ממד: כבוי'; d.dataset.state = 'off'; return; }
+    if (map.getZoom() < 8.5) { d.textContent = 'תלת־ממד: פעיל. התקרבו כדי לראות תבליט'; d.dataset.state = 'ok'; return; }
+    const c = map.getCenter();
+    let real;
+    try { real = await elevationAt(c.lng, c.lat, 12); }
+    catch { if (seq === diagSeq) { d.textContent = 'תלת־ממד: אין גישה לנתוני גובה'; d.dataset.state = 'bad'; } return; }
+    if (seq !== diagSeq) return;
+    const terrain = map.terrain;
+    if (!terrain || typeof terrain.getElevationForLngLatZoom !== 'function') { d.textContent = 'תלת־ממד: פעיל'; d.dataset.state = 'ok'; return; }
+    const shown = terrain.getElevationForLngLatZoom(c, map.transform.tileZoom) / exaggeration;
+    if (Math.abs(real) > 30 && Math.abs(shown) < 1) {
+      d.textContent = `תלת־ממד: נתוני הגובה לא הגיעו למפה (צריך ${fmt.format(real)} מ׳, מוצג 0)`;
+      d.dataset.state = 'bad';
+    } else {
+      d.textContent = `תלת־ממד: פעיל, גובה במרכז ${fmt.format(shown)} מ׳, הגזמה ×${exaggeration.toFixed(1)}`;
+      d.dataset.state = 'ok';
+    }
+  }
+  map.on('idle', updateDiag);
+  map.on('terrain', updateDiag);
+
+  // ---------- environment check: background workers ----------
+  function workersWork() {
+    return new Promise((res) => {
+      try {
+        const url = URL.createObjectURL(new Blob(['postMessage(1)'], { type: 'text/javascript' }));
+        const w = new Worker(url);
+        const t = setTimeout(() => { w.terminate(); res(false); }, 3000);
+        w.onmessage = () => { clearTimeout(t); w.terminate(); res(true); };
+        w.onerror = () => { clearTimeout(t); res(false); };
+      } catch { res(false); }
+    });
+  }
+  $('bannerClose').addEventListener('click', () => { $('banner').hidden = true; });
+  (async () => {
+    const opaque = location.protocol === 'content:';
+    const ok = await workersWork();
+    if (opaque || !ok) $('banner').hidden = false;
+  })();
+
+  // ---------- places & search ----------
+  const PLACES = [
+    { name: 'מכתש רמון', c: [34.79, 30.6], z: 11.8, p: 62, b: -35 },
+    { name: 'מצדה וים המלח', c: [35.345, 31.315], z: 13, p: 65, b: 90 },
+    { name: 'עין גדי', c: [35.375, 31.46], z: 12.8, p: 64, b: 100 },
+    { name: 'החרמון', c: [35.76, 33.3], z: 11.8, p: 62, b: 30 },
+    { name: 'הארבל והכנרת', c: [35.49, 32.82], z: 12.3, p: 65, b: 85 },
+    { name: 'הרי ירושלים', c: [35.15, 31.77], z: 11.6, p: 58, b: 70 },
+    { name: 'המכתש הגדול', c: [35.0, 30.95], z: 12, p: 60, b: 20 },
+    { name: 'הכרמל', c: [35.03, 32.72], z: 11.5, p: 60, b: -40 },
+    { name: 'הרי אילת', c: [34.93, 29.6], z: 11.8, p: 62, b: 160 }
+  ];
+  function go(view) {
+    const opts = { center: view.c, zoom: view.z, pitch: $('t3d').checked ? view.p : 0, bearing: view.b };
+    if (reduceMotion) map.jumpTo(opts); else map.flyTo({ ...opts, duration: 2600, essential: true });
+    closeSheetOnMobile();
+  }
+  const placesEl = $('places');
+  PLACES.forEach((pl) => {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.textContent = pl.name;
+    b.addEventListener('click', () => go(pl));
+    placesEl.appendChild(b);
+  });
+
+  $('searchForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const q = $('searchInput').value.trim();
+    const list = $('results');
+    list.innerHTML = '';
+    if (!q) return;
+    const url = 'https://nominatim.openstreetmap.org/search?format=jsonv2&limit=6&accept-language=he&bounded=1&viewbox=34.2,33.45,35.95,29.45&q=' + encodeURIComponent(q);
+    try {
+      const r = await fetch(url, { headers: { 'Accept': 'application/json' } });
+      if (!r.ok) throw new Error(r.status);
+      const data = await r.json();
+      if (!data.length) { list.innerHTML = '<li class="hint">לא נמצא מקום בשם הזה. נסו שם אחר או כתיב אחר.</li>'; return; }
+      data.forEach((d) => {
+        const li = document.createElement('li');
+        const b = document.createElement('button');
+        b.type = 'button';
+        b.textContent = d.display_name;
+        b.addEventListener('click', () => {
+          list.innerHTML = '';
+          go({ c: [Number(d.lon), Number(d.lat)], z: 12.5, p: 60, b: map.getBearing() });
+        });
+        li.appendChild(b);
+        list.appendChild(li);
+      });
+    } catch (err) {
+      list.innerHTML = '<li class="hint">החיפוש לא זמין כרגע. אפשר לגלול במפה או לבחור אחד מהמקומות למטה.</li>';
+    }
+  });
+
+  // ---------- elevation sampler (reads terrain tiles directly) ----------
+  const tileCache = new Map();
+  function tileFloat(lng, lat, z) {
+    const n = 2 ** z;
+    const latR = lat * Math.PI / 180;
+    return {
+      x: (lng + 180) / 360 * n,
+      y: (1 - Math.log(Math.tan(latR) + 1 / Math.cos(latR)) / Math.PI) / 2 * n
+    };
+  }
+  function getTile(z, x, y) {
+    const key = `${z}/${x}/${y}`;
+    if (tileCache.has(key)) return tileCache.get(key);
+    const p = fetch(DEM_TILES.replace('{z}', z).replace('{x}', x).replace('{y}', y))
+      .then((r) => { if (!r.ok) throw new Error(r.status); return r.blob(); })
+      .then((b) => createImageBitmap(b))
+      .then((bmp) => {
+        const c = document.createElement('canvas');
+        c.width = 256; c.height = 256;
+        const ctx = c.getContext('2d', { willReadFrequently: true });
+        ctx.drawImage(bmp, 0, 0);
+        return ctx.getImageData(0, 0, 256, 256).data;
+      });
+    p.catch(() => tileCache.delete(key));
+    tileCache.set(key, p);
+    if (tileCache.size > 400) tileCache.delete(tileCache.keys().next().value);
+    return p;
+  }
+  async function elevationAt(lng, lat, z = 13) {
+    const t = tileFloat(lng, lat, z);
+    const tx = Math.floor(t.x), ty = Math.floor(t.y);
+    const px = Math.min(255, Math.max(0, Math.floor((t.x - tx) * 256)));
+    const py = Math.min(255, Math.max(0, Math.floor((t.y - ty) * 256)));
+    const d = await getTile(z, tx, ty);
+    const i = (py * 256 + px) * 4;
+    return d[i] * 256 + d[i + 1] + d[i + 2] / 256 - 32768;
+  }
+
+  // ---------- status readout ----------
+  const fmt = new Intl.NumberFormat('he-IL', { maximumFractionDigits: 0 });
+  let statusSeq = 0;
+  async function updateStatus(lngLat) {
+    const seq = ++statusSeq;
+    const [x, y] = toITM(lngLat.lng, lngLat.lat);
+    const base = `<b>רשת ישראל:</b> <span class="ltr">${Math.round(x)} / ${Math.round(y)}</span><br>` +
+      `<b>אורך/רוחב:</b> <span class="ltr">${lngLat.lat.toFixed(5)}, ${lngLat.lng.toFixed(5)}</span>`;
+    status.pos.innerHTML = base + '<br><b>גובה:</b> …';
+    try {
+      const h = await elevationAt(lngLat.lng, lngLat.lat);
+      if (seq === statusSeq) status.pos.innerHTML = base + `<br><b>גובה:</b> ${fmt.format(h)} מ׳`;
+    } catch {
+      if (seq === statusSeq) status.pos.innerHTML = base + '<br><b>גובה:</b> לא זמין';
+    }
+  }
+  let moveRaf = null;
+  map.on('mousemove', (e) => {
+    if (moveRaf) return;
+    moveRaf = requestAnimationFrame(() => { moveRaf = null; updateStatus(e.lngLat); });
+  });
+
+  // ---------- own map overlay ----------
+  let overlay = null; // { url, w, h, coords, pdf, page }
+  let handles = [];
+  let anchorMode = false;
+  let pdfDoc = null;
+
+  function loadScript(src) {
+    return new Promise((res, rej) => {
+      const s = document.createElement('script');
+      s.src = src; s.onload = res; s.onerror = () => rej(new Error('script'));
+      document.head.appendChild(s);
+    });
+  }
+  async function ensurePdfJs() {
+    if (window.pdfjsLib) return;
+    await loadScript('https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js');
+    window.pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.worker.min.js';
+  }
+
+  function canvasToUrl(canvas, keepAlpha) {
+    return new Promise((res) => canvas.toBlob((b) => res(URL.createObjectURL(b)), keepAlpha ? 'image/png' : 'image/jpeg', 0.9));
+  }
+  function fitCanvas(w, h) {
+    const max = Math.min(4096, (map.painter && map.painter.context && map.painter.context.maxTextureSize) || 4096);
+    const s = Math.min(1, max / Math.max(w, h));
+    const c = document.createElement('canvas');
+    c.width = Math.round(w * s); c.height = Math.round(h * s);
+    return c;
+  }
+
+  async function renderPdfPage(n) {
+    const page = await pdfDoc.getPage(n);
+    const vp1 = page.getViewport({ scale: 1 });
+    const scale = Math.min(4096 / Math.max(vp1.width, vp1.height), 6);
+    const vp = page.getViewport({ scale });
+    const c = fitCanvas(vp.width, vp.height);
+    const ctx = c.getContext('2d');
+    ctx.fillStyle = '#fff';
+    ctx.fillRect(0, 0, c.width, c.height);
+    await page.render({ canvasContext: ctx, viewport: page.getViewport({ scale: scale * (c.width / vp.width) }) }).promise;
+    return { url: await canvasToUrl(c, false), w: c.width, h: c.height };
+  }
+
+  async function handleFile(file) {
+    if (!file) return;
+    const isPdf = file.type === 'application/pdf' || /\.pdf$/i.test(file.name);
+    toast('טוען את המפה…', 10000);
+    try {
+      let img;
+      if (isPdf) {
+        await ensurePdfJs();
+        pdfDoc = await window.pdfjsLib.getDocument({ data: await file.arrayBuffer() }).promise;
+        const sel = $('pageSelect');
+        sel.innerHTML = '';
+        for (let i = 1; i <= pdfDoc.numPages; i++) sel.add(new Option(String(i), String(i)));
+        $('pagePick').hidden = pdfDoc.numPages < 2;
+        img = await renderPdfPage(1);
+      } else {
+        pdfDoc = null;
+        $('pagePick').hidden = true;
+        const bmp = await createImageBitmap(file);
+        const c = fitCanvas(bmp.width, bmp.height);
+        c.getContext('2d').drawImage(bmp, 0, 0, c.width, c.height);
+        img = { url: await canvasToUrl(c, file.type === 'image/png'), w: c.width, h: c.height };
+      }
+      setOverlayImage(img, true);
+      $('fileName').textContent = file.name;
+      $('overlayTools').hidden = false;
+      toast('המפה נפרסה על המסך. עכשיו מעגנים אותה למקום הנכון.', 4000);
+      setAnchorMode(true);
+    } catch (err) {
+      console.error(err);
+      toast('לא הצלחתי לפתוח את הקובץ. נסו JPG, PNG או PDF אחר.', 4500);
+    }
+  }
+
+  function coordsForScreen(w, h) {
+    const canvas = map.getCanvas();
+    const cw = canvas.clientWidth, ch = canvas.clientHeight;
+    const panelW = window.innerWidth > 760 ? 360 : 0;
+    const cx = (cw - panelW) / 2, cy = ch / 2;
+    let bw = (cw - panelW) * 0.6, bh = bw * h / w;
+    if (bh > ch * 0.7) { bh = ch * 0.7; bw = bh * w / h; }
+    const pts = [[cx - bw / 2, cy - bh / 2], [cx + bw / 2, cy - bh / 2], [cx + bw / 2, cy + bh / 2], [cx - bw / 2, cy + bh / 2]];
+    return pts.map((p) => { const ll = map.unproject(p); return [ll.lng, ll.lat]; });
+  }
+
+  function setOverlayImage(img, newPlacement) {
+    const prev = overlay;
+    if (prev && prev.url !== img.url) URL.revokeObjectURL(prev.url);
+    let coords = prev && !newPlacement ? prev.coords : null;
+    if (!coords) {
+      map.jumpTo({ pitch: 0, bearing: 0 });
+      coords = coordsForScreen(img.w, img.h);
+    }
+    overlay = { ...img, coords };
+    if (map.getLayer('my-map')) map.removeLayer('my-map');
+    if (map.getSource('my-map')) map.removeSource('my-map');
+    map.addSource('my-map', { type: 'image', url: img.url, coordinates: coords });
+    map.addLayer({ id: 'my-map', type: 'raster', source: 'my-map', paint: { 'raster-opacity': Number($('opacity').value), 'raster-fade-duration': 0 } }, 'contour-lines');
+    refreshHandles();
+  }
+
+  function updateCoords(coords) {
+    overlay.coords = coords;
+    map.getSource('my-map').setCoordinates(coords);
+  }
+
+  function centerOf(coords) {
+    const s = coords.reduce((a, c) => [a[0] + c[0], a[1] + c[1]], [0, 0]);
+    return [s[0] / 4, s[1] / 4];
+  }
+
+  function clearHandles() { handles.forEach((m) => m.remove()); handles = []; }
+  function refreshHandles() {
+    clearHandles();
+    if (!overlay || !anchorMode) return;
+    overlay.coords.forEach((c, i) => {
+      const el = document.createElement('div');
+      el.className = 'handle';
+      el.setAttribute('aria-label', 'פינת המפה ' + (i + 1));
+      const m = new maplibregl.Marker({ element: el, draggable: true }).setLngLat(c).addTo(map);
+      m.on('drag', () => {
+        const ll = m.getLngLat();
+        const coords = overlay.coords.map((p) => p.slice());
+        coords[i] = [ll.lng, ll.lat];
+        updateCoords(coords);
+        handles[4].setLngLat(centerOf(coords));
+      });
+      handles.push(m);
+    });
+    const cel = document.createElement('div');
+    cel.className = 'handle center';
+    cel.setAttribute('aria-label', 'הזזת כל המפה');
+    const cm = new maplibregl.Marker({ element: cel, draggable: true }).setLngLat(centerOf(overlay.coords)).addTo(map);
+    let start = null, startCoords = null;
+    cm.on('dragstart', () => { start = cm.getLngLat(); startCoords = overlay.coords.map((p) => p.slice()); });
+    cm.on('drag', () => {
+      const ll = cm.getLngLat();
+      const dx = ll.lng - start.lng, dy = ll.lat - start.lat;
+      const coords = startCoords.map(([x, y]) => [x + dx, y + dy]);
+      updateCoords(coords);
+      coords.forEach((c, i) => handles[i].setLngLat(c));
+    });
+    handles.push(cm);
+  }
+
+  function setAnchorMode(on) {
+    anchorMode = on;
+    $('btnAnchor').setAttribute('aria-pressed', String(on));
+    $('anchorHint').hidden = !on;
+    if (on) {
+      setCoordsForm(false);
+      if (map.getPitch() > 5 || Math.abs(map.getBearing()) > 1) map.easeTo({ pitch: 0, bearing: 0, duration: reduceMotion ? 0 : 500 });
+    }
+    refreshHandles();
+  }
+  function setCoordsForm(on) {
+    $('itmForm').hidden = !on;
+    $('btnCoords').setAttribute('aria-pressed', String(on));
+    if (on && anchorMode) setAnchorMode(false);
+  }
+
+  const fileInput = $('fileInput');
+  fileInput.addEventListener('change', () => { handleFile(fileInput.files[0]); fileInput.value = ''; });
+  const drop = $('drop');
+  ['dragenter', 'dragover'].forEach((ev) => drop.addEventListener(ev, (e) => { e.preventDefault(); drop.classList.add('over'); }));
+  ['dragleave', 'drop'].forEach((ev) => drop.addEventListener(ev, (e) => { e.preventDefault(); drop.classList.remove('over'); }));
+  drop.addEventListener('drop', (e) => handleFile(e.dataTransfer.files[0]));
+
+  $('pageSelect').addEventListener('change', async (e) => {
+    toast('טוען עמוד…');
+    const img = await renderPdfPage(Number(e.target.value));
+    setOverlayImage(img, false);
+  });
+  $('opacity').addEventListener('input', (e) => {
+    $('opacityOut').textContent = Math.round(e.target.value * 100) + '%';
+    if (map.getLayer('my-map')) map.setPaintProperty('my-map', 'raster-opacity', Number(e.target.value));
+  });
+  $('btnAnchor').addEventListener('click', () => setAnchorMode(!anchorMode));
+  $('btnCoords').addEventListener('click', () => setCoordsForm($('itmForm').hidden));
+  $('btnFit').addEventListener('click', () => {
+    if (!overlay) return;
+    map.jumpTo({ pitch: 0, bearing: 0 });
+    updateCoords(coordsForScreen(overlay.w, overlay.h));
+    refreshHandles();
+  });
+  $('btnRemove').addEventListener('click', () => {
+    if (map.getLayer('my-map')) map.removeLayer('my-map');
+    if (map.getSource('my-map')) map.removeSource('my-map');
+    if (overlay) URL.revokeObjectURL(overlay.url);
+    overlay = null; pdfDoc = null;
+    setAnchorMode(false); setCoordsForm(false);
+    $('overlayTools').hidden = true;
+  });
+
+  // coordinate form
+  function crsLabels() {
+    const itm = $('crs').value === 'itm';
+    document.querySelectorAll('.lx').forEach((s) => { s.textContent = itm ? 'מזרח X' : 'אורך (lon)'; });
+    document.querySelectorAll('.ly').forEach((s) => { s.textContent = itm ? 'צפון Y' : 'רוחב (lat)'; });
+  }
+  $('crs').addEventListener('change', () => { crsLabels(); fillFromOverlay(); });
+  function fillFromOverlay() {
+    if (!overlay) return;
+    const tl = overlay.coords[0], br = overlay.coords[2];
+    const itm = $('crs').value === 'itm';
+    const a = itm ? toITM(tl[0], tl[1]) : tl;
+    const b = itm ? toITM(br[0], br[1]) : br;
+    const r = (v) => itm ? Math.round(v) : Number(v.toFixed(6));
+    $('x1').value = r(a[0]); $('y1').value = r(a[1]);
+    $('x2').value = r(b[0]); $('y2').value = r(b[1]);
+  }
+  $('btnFillCoords').addEventListener('click', fillFromOverlay);
+  $('btnCoords').addEventListener('click', () => { if (!$('itmForm').hidden && !$('x1').value) fillFromOverlay(); });
+  $('itmForm').addEventListener('submit', (e) => {
+    e.preventDefault();
+    if (!overlay) return;
+    const x1 = Number($('x1').value), y1 = Number($('y1').value), x2 = Number($('x2').value), y2 = Number($('y2').value);
+    if (![x1, y1, x2, y2].every(Number.isFinite)) return;
+    if (x2 <= x1 || y1 <= y2) { toast('הפינה השמאלית־עליונה צריכה להיות מערבית וצפונית לפינה הימנית־תחתונה.', 4500); return; }
+    let corners;
+    if ($('crs').value === 'itm') {
+      if (x1 < 50000 || x2 > 350000 || y2 < 300000 || y1 > 850000) { toast('הערכים לא נראים כמו רשת ישראל החדשה. בדקו שהוזנו מטרים מלאים (6 ספרות).', 5000); return; }
+      corners = [[x1, y1], [x2, y1], [x2, y2], [x1, y2]].map(([x, y]) => fromITM(x, y));
+    } else {
+      corners = [[x1, y1], [x2, y1], [x2, y2], [x1, y2]];
+    }
+    updateCoords(corners);
+    refreshHandles();
+    const lngs = corners.map((c) => c[0]), lats = corners.map((c) => c[1]);
+    map.fitBounds([[Math.min(...lngs), Math.min(...lats)], [Math.max(...lngs), Math.max(...lats)]], { padding: 60, duration: reduceMotion ? 0 : 1200 });
+    toast('המפה מוקמה לפי הקואורדינטות');
+  });
+
+  // ---------- elevation profile ----------
+  let profileMode = false;
+  let profilePts = [];
+  let profileMarkers = [];
+  let profileData = null;
+  let hoverMarker = null;
+
+  function haversine(a, b) {
+    const R = 6371008.8, rad = Math.PI / 180;
+    const dLat = (b[1] - a[1]) * rad, dLng = (b[0] - a[0]) * rad;
+    const h = Math.sin(dLat / 2) ** 2 + Math.cos(a[1] * rad) * Math.cos(b[1] * rad) * Math.sin(dLng / 2) ** 2;
+    return 2 * R * Math.asin(Math.sqrt(h));
+  }
+  function setProfileMode(on) {
+    profileMode = on;
+    $('btnProfile').setAttribute('aria-pressed', String(on));
+    map.getCanvas().style.cursor = on ? 'crosshair' : '';
+    if (on) {
+      clearProfile();
+      $('profileHint').textContent = 'לחצו על נקודת ההתחלה במפה.';
+      if (anchorMode) setAnchorMode(false);
+      if (losMode) setLosMode(false);
+      closeSheetOnMobile();
+    }
+  }
+  function clearProfile() {
+    profilePts = [];
+    profileMarkers.forEach((m) => m.remove());
+    profileMarkers = [];
+    profileData = null;
+    if (hoverMarker) { hoverMarker.remove(); hoverMarker = null; }
+    if (map.getSource('profile')) map.getSource('profile').setData({ type: 'FeatureCollection', features: [] });
+    $('profileOut').hidden = true;
+    $('btnProfileClear').hidden = true;
+    $('profileHint').textContent = 'לחצו על שתי נקודות במפה כדי לראות את פרופיל הגובה ביניהן.';
+  }
+  $('btnProfile').addEventListener('click', () => setProfileMode(!profileMode));
+  $('btnProfileClear').addEventListener('click', clearProfile);
+
+  map.on('click', async (e) => {
+    updateStatus(e.lngLat);
+    if (!profileMode) return;
+    const p = [e.lngLat.lng, e.lngLat.lat];
+    profilePts.push(p);
+    const el = document.createElement('div');
+    el.className = 'pin';
+    el.textContent = profilePts.length === 1 ? 'א' : 'ב';
+    profileMarkers.push(new maplibregl.Marker({ element: el }).setLngLat(p).addTo(map));
+    if (profilePts.length === 1) { $('profileHint').textContent = 'עכשיו לחצו על נקודת הסיום.'; return; }
+    setProfileMode(false);
+    await buildProfile(profilePts[0], profilePts[1]);
+  });
+
+  async function buildProfile(a, b) {
+    $('profileHint').textContent = 'מחשב את החתך…';
+    map.getSource('profile').setData({ type: 'Feature', geometry: { type: 'LineString', coordinates: [a, b] }, properties: {} });
+    const total = haversine(a, b);
+    const N = Math.max(40, Math.min(300, Math.round(total / 30)));
+    const pts = [];
+    for (let i = 0; i <= N; i++) {
+      const t = i / N;
+      pts.push([a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t]);
+    }
+    let elev;
+    try {
+      elev = await Promise.all(pts.map(([lng, lat]) => elevationAt(lng, lat, 13)));
+    } catch {
+      $('profileHint').textContent = 'נתוני הגובה לא נטענו. בדקו את החיבור ונסו שוב.';
+      return;
+    }
+    const dist = pts.map((_, i) => total * i / N);
+    let up = 0, down = 0;
+    for (let i = 1; i < elev.length; i++) {
+      const d = elev[i] - elev[i - 1];
+      if (d > 0) up += d; else down -= d;
+    }
+    profileData = { pts, elev, dist, total };
+    $('profileOut').hidden = false;
+    $('btnProfileClear').hidden = false;
+    $('profileHint').textContent = 'העבירו את האצבע או העכבר על הגרף כדי לראות את המקום במפה.';
+    const km = (m) => m >= 1000 ? (m / 1000).toFixed(2) + ' ק״מ' : Math.round(m) + ' מ׳';
+    const m = (v) => fmt.format(v) + ' מ׳';
+    $('stats').innerHTML = [
+      ['מרחק אווירי', km(total)],
+      ['הפרש גובה', m(elev[elev.length - 1] - elev[0])],
+      ['נקודה נמוכה', m(Math.min(...elev))],
+      ['נקודה גבוהה', m(Math.max(...elev))],
+      ['טיפוס מצטבר', m(up)],
+      ['ירידה מצטברת', m(down)]
+    ].map(([k, v]) => `<div><dt>${k}</dt><dd>${v}</dd></div>`).join('');
+    drawProfile();
+  }
+
+  function drawProfile(hoverIdx) {
+    if (!profileData) return;
+    const cv = $('profileCanvas');
+    const dpr = window.devicePixelRatio || 1;
+    const W = cv.clientWidth, H = cv.clientHeight;
+    cv.width = W * dpr; cv.height = H * dpr;
+    const ctx = cv.getContext('2d');
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    const cs = getComputedStyle(document.documentElement);
+    const cContour = cs.getPropertyValue('--contour').trim();
+    const cMuted = cs.getPropertyValue('--muted').trim();
+    const cRule = cs.getPropertyValue('--rule').trim();
+    const cWater = cs.getPropertyValue('--water').trim();
+    const { elev, dist, total } = profileData;
+    const pad = { l: 10, r: 44, t: 12, b: 20 };
+    let lo = Math.min(...elev), hi = Math.max(...elev);
+    const span = Math.max(20, hi - lo);
+    lo -= span * 0.08; hi = lo + span * 1.16;
+    // left-to-right: start (א) on the left, like a printed profile
+    const X = (d) => pad.l + (W - pad.l - pad.r) * (d / total);
+    const Y = (h) => pad.t + (H - pad.t - pad.b) * (1 - (h - lo) / (hi - lo));
+    ctx.clearRect(0, 0, W, H);
+    ctx.font = '11px "IBM Plex Sans Hebrew", Arial, sans-serif';
+    ctx.fillStyle = cMuted;
+    ctx.strokeStyle = cRule;
+    ctx.lineWidth = 1;
+    ctx.textAlign = 'left';
+    for (let k = 0; k <= 3; k++) {
+      const h = lo + (hi - lo) * k / 3;
+      const y = Y(h);
+      ctx.beginPath(); ctx.moveTo(pad.l, y); ctx.lineTo(W - pad.r, y); ctx.stroke();
+      ctx.fillText(fmt.format(h), W - pad.r + 4, y + 4);
+    }
+    ctx.textAlign = 'left'; ctx.fillText('א', pad.l, H - 5);
+    ctx.textAlign = 'right'; ctx.fillText('ב', W - pad.r, H - 5);
+    ctx.beginPath();
+    ctx.moveTo(X(0), Y(lo));
+    elev.forEach((h, i) => ctx.lineTo(X(dist[i]), Y(h)));
+    ctx.lineTo(X(total), Y(lo));
+    ctx.closePath();
+    ctx.globalAlpha = 0.18; ctx.fillStyle = cContour; ctx.fill(); ctx.globalAlpha = 1;
+    ctx.beginPath();
+    elev.forEach((h, i) => (i ? ctx.lineTo(X(dist[i]), Y(h)) : ctx.moveTo(X(dist[i]), Y(h))));
+    ctx.strokeStyle = cContour; ctx.lineWidth = 2; ctx.stroke();
+    if (hoverIdx != null) {
+      const x = X(dist[hoverIdx]), y = Y(elev[hoverIdx]);
+      ctx.strokeStyle = cWater; ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.moveTo(x, pad.t); ctx.lineTo(x, H - pad.b); ctx.stroke();
+      ctx.fillStyle = cWater; ctx.beginPath(); ctx.arc(x, y, 4, 0, Math.PI * 2); ctx.fill();
+      const label = fmt.format(elev[hoverIdx]) + ' מ׳';
+      ctx.textAlign = x > W / 2 ? 'right' : 'left';
+      ctx.fillStyle = cs.getPropertyValue('--ink').trim();
+      ctx.fillText(label, x + (x > W / 2 ? -7 : 7), Math.max(pad.t + 10, y - 8));
+    }
+  }
+  function profileHover(clientX) {
+    if (!profileData) return;
+    const cv = $('profileCanvas');
+    const r = cv.getBoundingClientRect();
+    const W = r.width, padL = 10, padR = 44;
+    const t = Math.min(1, Math.max(0, (clientX - r.left - padL) / (W - padL - padR)));
+    const idx = Math.round(t * (profileData.pts.length - 1));
+    drawProfile(idx);
+    const p = profileData.pts[idx];
+    if (!hoverMarker) {
+      const el = document.createElement('div');
+      el.className = 'cursor-dot';
+      hoverMarker = new maplibregl.Marker({ element: el }).setLngLat(p).addTo(map);
+    } else hoverMarker.setLngLat(p);
+  }
+  $('profileCanvas').addEventListener('pointermove', (e) => profileHover(e.clientX));
+  $('profileCanvas').addEventListener('pointerleave', () => { drawProfile(); if (hoverMarker) { hoverMarker.remove(); hoverMarker = null; } });
+  window.addEventListener('resize', () => drawProfile());
+
+  // ---------- streams & flow direction ----------
+  // Stream lines come from OpenStreetMap (via Overpass). In OSM a waterway is drawn in the
+  // direction the water flows; each segment is also checked against the elevation model and
+  // flipped if it would run uphill.
+  const OVERPASS = 'https://overpass-api.de/api/interpreter';
+  const STREAM_MIN_ZOOM = 11;
+  const streamFeatures = new Map();   // way id -> { id, coords, name, waterway, intermittent, corrected }
+  const loadedBoxes = [];
+  let streamsLoading = false, streamsPending = false;
+  let nodeIndex = new Map();
+  let streamPopup = null;
+
+  const STREAM_COLORS = {
+    dark: { line: '#4FC3F7', casing: 'rgba(5,25,45,0.75)', flow: 'rgba(255,255,255,0.95)', arrow: 'arrow-on-dark' },
+    light: { line: '#1565C0', casing: 'rgba(255,255,255,0.92)', flow: '#BFE6FF', arrow: 'arrow-on-light' }
+  };
+  function streamColorsFor(base) {
+    if (!map.getLayer('streams-line')) return;
+    const c = BASES[base].dark ? STREAM_COLORS.dark : STREAM_COLORS.light;
+    map.setPaintProperty('streams-casing', 'line-color', c.casing);
+    map.setPaintProperty('streams-line', 'line-color', c.line);
+    map.setPaintProperty('streams-flow', 'line-color', c.flow);
+    map.setLayoutProperty('streams-arrows', 'icon-image', c.arrow);
+    if (map.getLayer('channels-line')) {
+      map.setPaintProperty('channels-line', 'line-color', BASES[base].dark ? '#7FD3FF' : '#3D8BD9');
+      map.setLayoutProperty('channels-arrows', 'icon-image', c.arrow);
+    }
+  }
+
+  function arrowImage(fill, stroke) {
+    const r = 2, w = 20 * r, h = 16 * r;
+    const c = document.createElement('canvas');
+    c.width = w; c.height = h;
+    const x = c.getContext('2d');
+    x.beginPath();
+    x.moveTo(4 * r, 3 * r); x.lineTo(17 * r, 8 * r); x.lineTo(4 * r, 13 * r); x.lineTo(7.5 * r, 8 * r);
+    x.closePath();
+    x.lineJoin = 'round';
+    x.lineWidth = 3 * r; x.strokeStyle = stroke; x.stroke();
+    x.fillStyle = fill; x.fill();
+    return x.getImageData(0, 0, w, h);
+  }
+
+  // dash patterns that march toward the end of each line, i.e. downstream
+  function dashSteps(D, G, step) {
+    const P = D + G, out = [];
+    for (let s = 0; s < P - 1e-9; s += step) {
+      if (s < 1e-9) out.push([D, G]);
+      else if (s + D <= P) out.push([0, s, D, Math.max(0.001, P - s - D)]);
+      else out.push([s + D - P, P - D, P - s, 0.001]);
+    }
+    return out;
+  }
+  const DASHES = dashSteps(2, 3, 0.25);
+
+  function addStreamLayers() {
+    map.addImage('arrow-on-dark', arrowImage('#FFFFFF', '#0B3954'), { pixelRatio: 2 });
+    map.addImage('arrow-on-light', arrowImage('#0D47A1', '#FFFFFF'), { pixelRatio: 2 });
+    map.addSource('streams', { type: 'geojson', data: { type: 'FeatureCollection', features: [] }, attribution: 'נחלים: © OpenStreetMap contributors' });
+    map.addSource('stream-trace', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
+    const big = ['in', ['get', 'waterway'], ['literal', ['river', 'canal']]];
+    const width = (small, large, zSmall, zLarge) => ['interpolate', ['linear'], ['zoom'], 11, ['case', big, zSmall * large, zSmall * small], 15, ['case', big, zLarge * large, zLarge * small]];
+    const hidden = { visibility: 'none' };
+    map.addLayer({ id: 'streams-casing', type: 'line', source: 'streams', layout: { ...hidden, 'line-cap': 'round', 'line-join': 'round' },
+      paint: { 'line-width': width(1, 1.6, 3, 7) } });
+    map.addLayer({ id: 'streams-line', type: 'line', source: 'streams', layout: { ...hidden, 'line-cap': 'round', 'line-join': 'round' },
+      paint: { 'line-width': width(1, 1.6, 1.6, 4) } });
+    map.addLayer({ id: 'stream-trace-line', type: 'line', source: 'stream-trace', layout: { 'line-cap': 'round', 'line-join': 'round' },
+      paint: { 'line-color': '#FFC531', 'line-width': ['interpolate', ['linear'], ['zoom'], 11, 4, 15, 9], 'line-opacity': 0.95 } });
+    map.addLayer({ id: 'streams-flow', type: 'line', source: 'streams', layout: { ...hidden, 'line-join': 'round' },
+      paint: { 'line-width': width(1, 1.6, 1.1, 2.6), 'line-dasharray': DASHES[0] } });
+    map.addLayer({ id: 'streams-arrows', type: 'symbol', source: 'streams', minzoom: 11.5,
+      layout: { ...hidden, 'symbol-placement': 'line', 'symbol-spacing': ['interpolate', ['linear'], ['zoom'], 12, 90, 16, 160],
+        'icon-image': 'arrow-on-dark', 'icon-size': ['interpolate', ['linear'], ['zoom'], 12, 0.75, 16, 1.15],
+        'icon-allow-overlap': true, 'icon-ignore-placement': true, 'icon-rotation-alignment': 'map', 'icon-pitch-alignment': 'map' } });
+  }
+
+  function setStreamsStatus(t) { $('streamsStatus').textContent = t; }
+  const STREAMS_HINT = 'החצים והקווים הנעים מראים לאן המים זורמים. לחיצה על נחל מסמנת בצהוב לאן הוא ממשיך.';
+
+  function streamBoxes() {
+    const c = map.getCenter(), b = map.getBounds(), maxSpan = 0.3;
+    const w = Math.max(b.getWest(), c.lng - maxSpan / 2), e = Math.min(b.getEast(), c.lng + maxSpan / 2);
+    const s = Math.max(b.getSouth(), c.lat - maxSpan / 2), n = Math.min(b.getNorth(), c.lat + maxSpan / 2);
+    const pw = (e - w) * 0.2, ph = (n - s) * 0.2;
+    return { inner: [w, s, e, n], outer: [w - pw, s - ph, e + pw, n + ph] };
+  }
+  const covered = (b) => loadedBoxes.some((L) => b[0] >= L[0] && b[1] >= L[1] && b[2] <= L[2] && b[3] <= L[3]);
+
+  async function loadStreams() {
+    if (!$('tStreams').checked) return;
+    if (map.getZoom() < STREAM_MIN_ZOOM) { setStreamsStatus('התקרבו עוד קצת כדי לטעון את הנחלים באזור.'); return; }
+    const { inner, outer } = streamBoxes();
+    if (covered(inner)) return;
+    if (streamsLoading) { streamsPending = true; return; }
+    streamsLoading = true;
+    setStreamsStatus('טוען נחלים…');
+    const q = `[out:json][timeout:25];way["waterway"~"^(river|stream|wadi|canal)$"](${outer[1]},${outer[0]},${outer[3]},${outer[2]});out geom;`;
+    try {
+      const r = await fetch(OVERPASS, { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: 'data=' + encodeURIComponent(q) });
+      if (!r.ok) throw new Error(r.status);
+      const data = await r.json();
+      const fresh = [];
+      for (const el of data.elements || []) {
+        if (el.type !== 'way' || !el.geometry || el.geometry.length < 2 || streamFeatures.has(el.id)) continue;
+        const t = el.tags || {};
+        const f = {
+          id: el.id,
+          coords: el.geometry.map((g) => [g.lon, g.lat]),
+          name: t['name:he'] || t.name || '',
+          waterway: t.waterway === 'wadi' ? 'stream' : t.waterway,
+          intermittent: t.intermittent === 'yes' || t.waterway === 'wadi' || t.seasonal === 'yes',
+          corrected: false
+        };
+        streamFeatures.set(el.id, f);
+        fresh.push(f);
+      }
+      loadedBoxes.push(outer);
+      await checkDirections(fresh);
+      refreshStreams();
+      setStreamsStatus(streamFeatures.size ? STREAMS_HINT : 'לא נמצאו נחלים מסומנים באזור הזה.');
+    } catch (err) {
+      setStreamsStatus('שרת הנחלים עמוס או לא זמין כרגע. הזיזו קצת את המפה כדי לנסות שוב.');
+    } finally {
+      streamsLoading = false;
+      if (streamsPending) { streamsPending = false; loadStreams(); }
+    }
+  }
+
+  async function checkDirections(list) {
+    await Promise.allSettled(list.map(async (f) => {
+      if (f.waterway === 'canal') return;
+      const a = f.coords[0], b = f.coords[f.coords.length - 1];
+      const [ha, hb] = await Promise.all([elevationAt(a[0], a[1], 12), elevationAt(b[0], b[1], 12)]);
+      if (ha < hb - 8) { f.coords.reverse(); f.corrected = true; }
+    }));
+  }
+
+  const nodeKey = (c) => c[0].toFixed(6) + ',' + c[1].toFixed(6);
+  function refreshStreams() {
+    nodeIndex = new Map();
+    const features = [];
+    for (const f of streamFeatures.values()) {
+      f.coords.forEach((c, idx) => {
+        const k = nodeKey(c);
+        if (!nodeIndex.has(k)) nodeIndex.set(k, []);
+        nodeIndex.get(k).push({ id: f.id, idx });
+      });
+      features.push({ type: 'Feature', id: f.id, properties: { id: f.id, waterway: f.waterway }, geometry: { type: 'LineString', coordinates: f.coords } });
+    }
+    map.getSource('streams').setData({ type: 'FeatureCollection', features });
+  }
+
+  function lineLength(coords) {
+    let L = 0;
+    for (let i = 1; i < coords.length; i++) L += haversine(coords[i - 1], coords[i]);
+    return L;
+  }
+
+  function traceDownstream(startId) {
+    const lines = [], names = [], seen = new Set();
+    let f = streamFeatures.get(startId), from = 0, length = 0, end = null;
+    while (f && !seen.has(f.id) && lines.length < 500) {
+      seen.add(f.id);
+      const part = f.coords.slice(from);
+      lines.push(part);
+      length += lineLength(part);
+      if (f.name && names[names.length - 1] !== f.name) names.push(f.name);
+      end = f.coords[f.coords.length - 1];
+      const next = (nodeIndex.get(nodeKey(end)) || [])
+        .filter((c) => c.id !== f.id && !seen.has(c.id) && c.idx < streamFeatures.get(c.id).coords.length - 1)
+        .sort((a, b) => (streamFeatures.get(b.id).waterway === 'river') - (streamFeatures.get(a.id).waterway === 'river'))[0];
+      if (!next) break;
+      f = streamFeatures.get(next.id);
+      from = next.idx;
+    }
+    return { lines, names, length, end };
+  }
+
+  function nearLoadedEdge(p) {
+    return !loadedBoxes.some((L) => {
+      const mx = (L[2] - L[0]) * 0.03, my = (L[3] - L[1]) * 0.03;
+      return p[0] > L[0] + mx && p[0] < L[2] - mx && p[1] > L[1] + my && p[1] < L[3] - my;
+    });
+  }
+
+  const COMPASS = ['צפון', 'צפון־מזרח', 'מזרח', 'דרום־מזרח', 'דרום', 'דרום־מערב', 'מערב', 'צפון־מערב'];
+  function compass(a, b) {
+    const rad = Math.PI / 180;
+    const y = Math.sin((b[0] - a[0]) * rad) * Math.cos(b[1] * rad);
+    const x = Math.cos(a[1] * rad) * Math.sin(b[1] * rad) - Math.sin(a[1] * rad) * Math.cos(b[1] * rad) * Math.cos((b[0] - a[0]) * rad);
+    const deg = (Math.atan2(y, x) / rad + 360) % 360;
+    return COMPASS[Math.round(deg / 45) % 8];
+  }
+  const esc = (s) => String(s).replace(/[&<>"']/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]));
+
+  function clearTrace() {
+    if (map.getSource('stream-trace')) map.getSource('stream-trace').setData({ type: 'FeatureCollection', features: [] });
+  }
+
+  async function showStream(id, lngLat) {
+    const f = streamFeatures.get(id);
+    if (!f) return;
+    if (streamPopup) { const old = streamPopup; streamPopup = null; old.remove(); }
+    const trace = traceDownstream(id);
+    map.getSource('stream-trace').setData({ type: 'Feature', properties: {}, geometry: { type: 'MultiLineString', coordinates: trace.lines } });
+    const a = f.coords[0], b = f.coords[f.coords.length - 1];
+    let elevLine = '';
+    try {
+      const [ha, hb] = await Promise.all([elevationAt(a[0], a[1], 13), elevationAt(b[0], b[1], 13)]);
+      elevLine = `<p>הקטע הזה יורד מגובה ${fmt.format(ha)} מ׳ ל־${fmt.format(hb)} מ׳.</p>`;
+    } catch { /* elevation is optional here */ }
+    const title = f.name || 'נחל ללא שם במפה';
+    const kind = f.waterway === 'river' ? 'נחל איתן' : f.waterway === 'canal' ? 'תעלה' : f.intermittent ? 'נחל אכזב, זורם בעיקר אחרי גשמים' : 'נחל';
+    const onward = trace.names.filter((n) => n !== f.name);
+    const km = trace.length >= 1000 ? (trace.length / 1000).toFixed(1) + ' ק״מ' : Math.round(trace.length) + ' מ׳';
+    const endNote = trace.end && nearLoadedEdge(trace.end)
+      ? 'הנחל ממשיך מעבר לאזור שנטען. הזיזו את המפה לכיוון הקו הצהוב ולחצו שוב כדי לראות את ההמשך.'
+      : 'כאן מסתיים המסלול שמסומן במפה: מפגש עם גוף מים, שקע, או נקודה שבה הנחל לא ממשיך בנתונים.';
+    const html = `<div class="sp">
+      <h3>${esc(title)}</h3>
+      <p class="sp-kind">${kind}</p>
+      <p>זורם לכיוון <b>${compass(a, b)}</b>.</p>
+      ${elevLine}
+      ${onward.length ? `<p>ממשיך אל: <b>${onward.map(esc).join(' ← ')}</b></p>` : ''}
+      <p>המסלול הצהוב: ${km} במורד הזרם.</p>
+      <p class="sp-note">${endNote}</p>
+      ${f.corrected ? '<p class="sp-note">כיוון הקטע הזה תוקן לפי נתוני הגובה.</p>' : ''}
+    </div>`;
+    streamPopup = new maplibregl.Popup({ maxWidth: '280px', className: 'stream-popup' }).setLngLat(lngLat).setHTML(html).addTo(map);
+    const mine = streamPopup;
+    mine.on('close', () => { if (streamPopup === mine) { clearTrace(); streamPopup = null; } });
+  }
+
+  map.on('click', (e) => {
+    if (!$('tStreams').checked || profileMode || anchorMode || losMode || !map.getLayer('streams-line')) return;
+    const p = e.point, tol = 12;
+    const hits = map.queryRenderedFeatures([[p.x - tol, p.y - tol], [p.x + tol, p.y + tol]], { layers: ['streams-line'] });
+    if (hits.length) showStream(hits[0].properties.id, e.lngLat);
+  });
+
+  let animOn = false, animStep = 0, animLast = 0;
+  function animate(t) {
+    if (!animOn) return;
+    if (t - animLast > 55) {
+      animStep = (animStep + 1) % DASHES.length;
+      map.setPaintProperty('streams-flow', 'line-dasharray', DASHES[animStep]);
+      animLast = t;
+    }
+    requestAnimationFrame(animate);
+  }
+  function applyStreamVisibility() {
+    if (!map.getLayer('streams-line')) return;
+    const on = $('tStreams').checked, flow = on && $('tFlowAnim').checked;
+    ['streams-casing', 'streams-line', 'streams-arrows'].forEach((l) => map.setLayoutProperty(l, 'visibility', on ? 'visible' : 'none'));
+    map.setLayoutProperty('streams-flow', 'visibility', flow ? 'visible' : 'none');
+    if (!on) { clearTrace(); if (streamPopup) streamPopup.remove(); }
+    if (flow && !animOn) { animOn = true; requestAnimationFrame(animate); }
+    if (!flow) animOn = false;
+    if (on) loadStreams(); else setStreamsStatus(STREAMS_HINT);
+  }
+  if (reduceMotion) $('tFlowAnim').checked = false;
+  $('tStreams').addEventListener('change', applyStreamVisibility);
+  $('tFlowAnim').addEventListener('change', applyStreamVisibility);
+  let streamMoveTimer;
+  map.on('moveend', () => { clearTimeout(streamMoveTimer); streamMoveTimer = setTimeout(loadStreams, 500); });
+
+  // ---------- line of sight ----------
+  // Checks whether a person standing at A can see B over the terrain.
+  // Earth curvature is included with standard atmospheric refraction (effective radius 4/3 R).
+  const R_EFF = 6371008.8 * 4 / 3;
+  function bearingDeg(a, b) { // initial great-circle bearing from a to b, degrees from true north
+    const rad = Math.PI / 180;
+    const y = Math.sin((b[0] - a[0]) * rad) * Math.cos(b[1] * rad);
+    const x = Math.cos(a[1] * rad) * Math.sin(b[1] * rad) - Math.sin(a[1] * rad) * Math.cos(b[1] * rad) * Math.cos((b[0] - a[0]) * rad);
+    return (Math.atan2(y, x) / rad + 360) % 360;
+  }
+  const LOS_GREEN = '#2FA866', LOS_RED = '#D64545';
+  let losMode = false;
+  let losPts = [];
+  let losMarkers = [];
+  let losBlockMarker = null;
+  let losHoverMarker = null;
+  let losData = null;
+  let losSeq = 0;
+
+  function addLosLayers() {
+    map.addSource('los', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
+    map.addLayer({ id: 'los-casing', type: 'line', source: 'los', layout: { 'line-cap': 'round', 'line-join': 'round' },
+      paint: { 'line-color': '#ffffff', 'line-width': ['interpolate', ['linear'], ['zoom'], 10, 5, 15, 9], 'line-opacity': 0.9 } });
+    map.addLayer({ id: 'los-line', type: 'line', source: 'los', layout: { 'line-cap': 'round', 'line-join': 'round' },
+      paint: { 'line-color': ['case', ['get', 'vis'], LOS_GREEN, LOS_RED], 'line-width': ['interpolate', ['linear'], ['zoom'], 10, 3, 15, 6] } });
+  }
+
+  const kmText = (m) => m >= 1000 ? (m / 1000).toFixed(m >= 10000 ? 1 : 2) + ' ק״מ' : Math.round(m) + ' מ׳';
+  const mText = (v) => fmt.format(v) + ' מ׳';
+
+  function setLosMode(on) {
+    losMode = on;
+    $('btnLos').setAttribute('aria-pressed', String(on));
+    map.getCanvas().style.cursor = on ? 'crosshair' : '';
+    if (on) {
+      if (profileMode) setProfileMode(false);
+      if (anchorMode) setAnchorMode(false);
+      clearLos();
+      $('losHint').textContent = 'לחצו במפה על המיקום של הצופה.';
+      closeSheetOnMobile();
+    }
+  }
+  function clearLos() {
+    losSeq++;
+    losPts = [];
+    losMarkers.forEach((m) => m.remove());
+    losMarkers = [];
+    if (losBlockMarker) { losBlockMarker.remove(); losBlockMarker = null; }
+    if (losHoverMarker) { losHoverMarker.remove(); losHoverMarker = null; }
+    losData = null;
+    if (map.getSource('los')) map.getSource('los').setData({ type: 'FeatureCollection', features: [] });
+    $('losOut').hidden = true;
+    $('btnLosClear').hidden = true;
+    $('losHint').textContent = 'לחצו במפה על מיקום הצופה ואחר כך על המטרה. אחר כך אפשר לגרור כל אחת מהנקודות.';
+  }
+  $('btnLos').addEventListener('click', () => setLosMode(!losMode));
+  $('btnLosClear').addEventListener('click', clearLos);
+  ['losH1', 'losH2'].forEach((id) => $(id).addEventListener('change', () => { if (losPts.length === 2) computeLos(); }));
+
+  map.on('click', (e) => {
+    if (!losMode) return;
+    const i = losPts.length;
+    const p = [e.lngLat.lng, e.lngLat.lat];
+    losPts.push(p);
+    const el = document.createElement('div');
+    el.className = 'pin los';
+    el.textContent = i === 0 ? 'צ' : 'מ';
+    el.title = i === 0 ? 'צופה' : 'מטרה';
+    const m = new maplibregl.Marker({ element: el, draggable: true }).setLngLat(p).addTo(map);
+    m.on('dragend', () => {
+      const ll = m.getLngLat();
+      losPts[i] = [ll.lng, ll.lat];
+      if (losPts.length === 2) computeLos();
+    });
+    losMarkers.push(m);
+    if (losPts.length === 1) { $('losHint').textContent = 'עכשיו לחצו על המטרה, הנקודה שרוצים לבדוק אם רואים אותה.'; return; }
+    setLosMode(false);
+    computeLos();
+  });
+
+  async function computeLos() {
+    const seq = ++losSeq;
+    const [A, B] = losPts;
+    const D = haversine(A, B);
+    if (D < 20) { $('losHint').textContent = 'הנקודות קרובות מדי. בחרו נקודות במרחק של יותר מ־20 מטר.'; return; }
+    $('losHint').textContent = 'מחשב קו ראייה…';
+    const N = Math.min(1500, Math.max(60, Math.ceil(D / 15)));
+    const pts = [];
+    for (let i = 0; i <= N; i++) { const t = i / N; pts.push([A[0] + (B[0] - A[0]) * t, A[1] + (B[1] - A[1]) * t]); }
+    let elev;
+    try { elev = await Promise.all(pts.map(([lng, lat]) => elevationAt(lng, lat, 13))); }
+    catch { if (seq === losSeq) $('losHint').textContent = 'נתוני הגובה לא נטענו. בדקו את החיבור ונסו שוב.'; return; }
+    if (seq !== losSeq) return;
+
+    const h1 = Math.max(0, Number($('losH1').value) || 0), h2 = Math.max(0, Number($('losH2').value) || 0);
+    const zA = elev[0] + h1, zB = elev[N] + h2;
+    const x = (i) => D * i / N;
+    const bulge = (i) => x(i) * (D - x(i)) / (2 * R_EFF);
+
+    // A → B: the lowest clearance between the sight line and the (curvature-corrected) ground
+    let worst = { i: -1, margin: Infinity };
+    for (let i = 1; i < N; i++) {
+      const sight = zA + (zB - zA) * i / N;
+      const margin = sight - (elev[i] + bulge(i));
+      if (margin < worst.margin) worst = { i, margin };
+    }
+    const clear = worst.margin >= 0;
+
+    // which ground along the line a standing person (target height) would be visible from A
+    const vis = [true];
+    let maxSlope = -Infinity;
+    for (let i = 1; i <= N; i++) {
+      const drop = x(i) * x(i) / (2 * R_EFF);
+      const ground = elev[i] - drop - zA;
+      vis.push((ground + h2) / x(i) >= maxSlope);
+      maxSlope = Math.max(maxSlope, ground / x(i));
+    }
+    vis[N] = clear;
+
+    // map: green where ground is seen from A, red where hidden
+    const features = [];
+    let start = 0;
+    for (let i = 1; i <= N; i++) {
+      if (i === N || vis[i] !== vis[start]) {
+        features.push({ type: 'Feature', properties: { vis: vis[start] }, geometry: { type: 'LineString', coordinates: pts.slice(start, i + 1) } });
+        start = i;
+      }
+    }
+    map.getSource('los').setData({ type: 'FeatureCollection', features });
+
+    if (losBlockMarker) { losBlockMarker.remove(); losBlockMarker = null; }
+    if (!clear && worst.i > 0) {
+      const el = document.createElement('div');
+      el.className = 'pin block';
+      el.textContent = '✕';
+      el.title = 'המכשול העיקרי';
+      losBlockMarker = new maplibregl.Marker({ element: el }).setLngLat(pts[worst.i]).addTo(map);
+    }
+
+    losData = { pts, elev, N, D, zA, zB, vis, clear, worst, bulge: Array.from({ length: N + 1 }, (_, i) => bulge(i)) };
+    const borderline = Math.abs(worst.margin) < 10;
+    const v = $('losVerdict');
+    v.dataset.state = clear ? 'ok' : 'bad';
+    v.textContent = clear
+      ? (borderline ? 'יש קו ראייה, אבל גבולי' : 'יש קו ראייה: הנקודות רואות זו את זו')
+      : (borderline ? 'כנראה אין קו ראייה, אבל זה גבולי' : 'אין קו ראייה: השטח מסתיר');
+    const seenPct = Math.round(100 * vis.filter(Boolean).length / vis.length);
+    const az = bearingDeg(A, B), back = (az + 180) % 360;
+    const azText = (d) => `${d.toFixed(1)}°`;
+    const mils = (d) => Math.round(d / 360 * 6400) % 6400;
+    $('losAz').innerHTML = `אזימוט הסתכלות: <b>${azText(az)}</b> (${COMPASS[Math.round(az / 45) % 8]}, ${mils(az)} אלפיות)`;
+    const rows = [
+      ['מרחק', kmText(D)],
+      ['קרקע אצל הצופה', mText(elev[0])],
+      ['קרקע אצל המטרה', mText(elev[N])],
+      clear ? ['מרווח מינימלי', mText(worst.margin)] : ['הקו נחסם ב־', mText(-worst.margin)],
+      [clear ? 'הכי קרוב לקרקע' : 'המכשול העיקרי', kmText(x(worst.i)) + ' מהצופה'],
+      ['נראה מהצופה', seenPct + '% מהקו'],
+      ['אזימוט חזרה', `${azText(back)} (${mils(back)} אלפיות)`]
+    ];
+    $('losStats').innerHTML = rows.map(([k, val]) => `<div><dt>${k}</dt><dd>${val}</dd></div>`).join('');
+    $('losNote').textContent = borderline
+      ? 'ההפרש קטן מ־10 מטר, בתוך טווח השגיאה של נתוני הגובה. בשטח התשובה יכולה להיות הפוכה.'
+      : 'בקו על המפה: ירוק הוא קרקע שהצופה רואה, ואדום הוא קרקע מוסתרת.';
+    $('losOut').hidden = false;
+    $('btnLosClear').hidden = false;
+    $('losHint').textContent = 'אפשר לגרור את הצופה או את המטרה כדי לבדוק מיקום אחר.';
+    drawLos();
+  }
+
+  function drawLos(hoverIdx) {
+    if (!losData) return;
+    const cv = $('losCanvas');
+    const dpr = window.devicePixelRatio || 1;
+    const W = cv.clientWidth, H = cv.clientHeight;
+    cv.width = W * dpr; cv.height = H * dpr;
+    const ctx = cv.getContext('2d');
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    const cs = getComputedStyle(document.documentElement);
+    const cMuted = cs.getPropertyValue('--muted').trim();
+    const cRule = cs.getPropertyValue('--rule').trim();
+    const cInk = cs.getPropertyValue('--ink').trim();
+    const { elev, N, D, zA, zB, vis, clear, worst, bulge } = losData;
+    const ground = elev.map((h, i) => h + bulge[i]);
+    let lo = Math.min(...ground, zA, zB), hi = Math.max(...ground, zA, zB);
+    const span = Math.max(20, hi - lo);
+    lo -= span * 0.08; hi = lo + span * 1.18;
+    const pad = { l: 12, r: 44, t: 12, b: 20 };
+    const X = (i) => pad.l + (W - pad.l - pad.r) * (i / N);
+    const Y = (h) => pad.t + (H - pad.t - pad.b) * (1 - (h - lo) / (hi - lo));
+    ctx.clearRect(0, 0, W, H);
+    ctx.font = '11px "IBM Plex Sans Hebrew", Arial, sans-serif';
+    ctx.strokeStyle = cRule; ctx.fillStyle = cMuted; ctx.lineWidth = 1; ctx.textAlign = 'left';
+    for (let k = 0; k <= 3; k++) {
+      const h = lo + (hi - lo) * k / 3, y = Y(h);
+      ctx.beginPath(); ctx.moveTo(pad.l, y); ctx.lineTo(W - pad.r, y); ctx.stroke();
+      ctx.fillText(fmt.format(h), W - pad.r + 4, y + 4);
+    }
+    ctx.textAlign = 'left'; ctx.fillText('צופה', pad.l, H - 5);
+    ctx.textAlign = 'right'; ctx.fillText('מטרה', W - pad.r, H - 5);
+    // terrain fill
+    ctx.beginPath(); ctx.moveTo(X(0), Y(lo));
+    ground.forEach((h, i) => ctx.lineTo(X(i), Y(h)));
+    ctx.lineTo(X(N), Y(lo)); ctx.closePath();
+    ctx.globalAlpha = 0.16; ctx.fillStyle = cInk; ctx.fill(); ctx.globalAlpha = 1;
+    // ground outline coloured by what A can see
+    ctx.lineWidth = 2.5;
+    for (let i = 1; i <= N; i++) {
+      ctx.strokeStyle = vis[i] ? LOS_GREEN : LOS_RED;
+      ctx.beginPath(); ctx.moveTo(X(i - 1), Y(ground[i - 1])); ctx.lineTo(X(i), Y(ground[i])); ctx.stroke();
+    }
+    // sight line
+    ctx.lineWidth = 1.8;
+    ctx.strokeStyle = clear ? LOS_GREEN : LOS_RED;
+    ctx.setLineDash(clear ? [] : [6, 4]);
+    ctx.beginPath(); ctx.moveTo(X(0), Y(zA)); ctx.lineTo(X(N), Y(zB)); ctx.stroke();
+    ctx.setLineDash([]);
+    [[0, zA], [N, zB]].forEach(([i, z]) => { ctx.fillStyle = cInk; ctx.beginPath(); ctx.arc(X(i), Y(z), 3.5, 0, Math.PI * 2); ctx.fill(); });
+    if (!clear && worst.i > 0) {
+      const bx = X(worst.i), by = Y(ground[worst.i]);
+      ctx.strokeStyle = LOS_RED; ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.moveTo(bx - 5, by - 5); ctx.lineTo(bx + 5, by + 5); ctx.moveTo(bx + 5, by - 5); ctx.lineTo(bx - 5, by + 5); ctx.stroke();
+    }
+    if (hoverIdx != null) {
+      const hx = X(hoverIdx), hy = Y(ground[hoverIdx]);
+      ctx.strokeStyle = cMuted; ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.moveTo(hx, pad.t); ctx.lineTo(hx, H - pad.b); ctx.stroke();
+      ctx.fillStyle = cInk; ctx.textAlign = hx > W / 2 ? 'right' : 'left';
+      ctx.fillText(`${mText(elev[hoverIdx])}, ${kmText(D * hoverIdx / N)}`, hx + (hx > W / 2 ? -7 : 7), Math.max(pad.t + 10, hy - 8));
+    }
+  }
+  function losHover(clientX) {
+    if (!losData) return;
+    const r = $('losCanvas').getBoundingClientRect();
+    const t = Math.min(1, Math.max(0, (clientX - r.left - 12) / (r.width - 12 - 44)));
+    const idx = Math.round(t * losData.N);
+    drawLos(idx);
+    const p = losData.pts[idx];
+    if (!losHoverMarker) {
+      const el = document.createElement('div');
+      el.className = 'cursor-dot';
+      losHoverMarker = new maplibregl.Marker({ element: el }).setLngLat(p).addTo(map);
+    } else losHoverMarker.setLngLat(p);
+  }
+  $('losCanvas').addEventListener('pointermove', (e) => losHover(e.clientX));
+  $('losCanvas').addEventListener('pointerleave', () => { drawLos(); if (losHoverMarker) { losHoverMarker.remove(); losHoverMarker = null; } });
+  window.addEventListener('resize', () => drawLos());
+
+  // ---------- terrain analysis: ridges, spurs and computed channels ----------
+  // Both are computed from the elevation model for the area on screen.
+  // Ridges: every cell is linked to its steepest-uphill neighbour and the "uphill flow" is
+  // accumulated; crests and spurs are where many uphill paths converge.
+  // Channels: the same thing downhill, after filling small pits in the elevation model,
+  // which finds drainage lines that are missing from the stream map.
+  const RIDGE_DETAIL = { low: { area: 0.4e6, tpi: 4 }, mid: { area: 0.05e6, tpi: 2 }, high: { area: 0.015e6, tpi: 1.2 } };
+  const CHANNEL_DETAIL = { low: { area: 0.6e6 }, mid: { area: 0.1e6 }, high: { area: 0.03e6 } };
+  let gridCache = null;
+  let ridgeKey = '', channelKey = '';
+  let analysisSeq = 0;
+
+  function addTerrainAnalysisLayers() {
+    const empty = { type: 'FeatureCollection', features: [] };
+    map.addSource('ridges', { type: 'geojson', data: empty });
+    map.addSource('channels', { type: 'geojson', data: empty });
+    const hidden = { visibility: 'none', 'line-cap': 'round', 'line-join': 'round' };
+    const sWidth = (lo, mid, hi) => ['interpolate', ['linear'], ['get', 's'], 4, lo, 5, mid, 6.3, hi];
+    map.addLayer({ id: 'ridges-casing', type: 'line', source: 'ridges', layout: hidden,
+      paint: { 'line-color': 'rgba(255,255,255,0.8)',
+        'line-opacity': ['interpolate', ['linear'], ['get', 's'], 4.6, 0, 5.6, 0.8],
+        'line-width': ['interpolate', ['linear'], ['zoom'], 11, sWidth(1.5, 3, 5), 15, sWidth(3, 5.5, 9)] } });
+    map.addLayer({ id: 'ridges-line', type: 'line', source: 'ridges', layout: hidden,
+      paint: { 'line-color': ['interpolate', ['linear'], ['get', 's'], 4, '#F7887F', 5, '#E0353A', 6.3, '#8E0B12'],
+        'line-width': ['interpolate', ['linear'], ['zoom'], 11, sWidth(0.8, 1.7, 3.4), 15, sWidth(1.6, 3.2, 6.5)] } });
+    map.addLayer({ id: 'channels-line', type: 'line', source: 'channels', layout: hidden,
+      paint: { 'line-color': '#7FD3FF', 'line-opacity': 0.9,
+        'line-width': ['interpolate', ['linear'], ['zoom'], 11, sWidth(0.6, 1, 2), 15, sWidth(1.2, 2, 3.6)] } });
+    map.addLayer({ id: 'channels-arrows', type: 'symbol', source: 'channels', minzoom: 12,
+      layout: { visibility: 'none', 'symbol-placement': 'line', 'symbol-spacing': 130, 'icon-image': 'arrow-on-dark',
+        'icon-size': ['interpolate', ['linear'], ['zoom'], 12, 0.5, 16, 0.8],
+        'icon-allow-overlap': true, 'icon-ignore-placement': true, 'icon-rotation-alignment': 'map', 'icon-pitch-alignment': 'map' } });
+  }
+
+  function analysisRange() {
+    if (map.getZoom() < 10.5) return null;
+    const zc = Math.min(13, Math.max(11, Math.floor(map.getZoom())));
+    const c = map.getCenter();
+    const ct = tileFloat(c.lng, c.lat, zc);
+    const cx = Math.floor(ct.x), cy = Math.floor(ct.y);
+    const b = map.getBounds();
+    const nw = tileFloat(b.getWest(), b.getNorth(), zc), se = tileFloat(b.getEast(), b.getSouth(), zc);
+    const r = {
+      zc, lat: c.lat,
+      tx0: Math.max(cx - 1, Math.floor(nw.x)), tx1: Math.min(cx + 1, Math.floor(se.x)),
+      ty0: Math.max(cy - 1, Math.floor(nw.y)), ty1: Math.min(cy + 1, Math.floor(se.y))
+    };
+    r.key = [zc, r.tx0, r.tx1, r.ty0, r.ty1].join('/');
+    return r;
+  }
+
+  async function getGrid(r) {
+    if (gridCache && gridCache.key === r.key) return gridCache;
+    const nx = r.tx1 - r.tx0 + 1, ny = r.ty1 - r.ty0 + 1, W = nx * 256, H = ny * 256, N = W * H;
+    const jobs = [];
+    for (let ty = r.ty0; ty <= r.ty1; ty++) for (let tx = r.tx0; tx <= r.tx1; tx++) jobs.push(getTile(r.zc, tx, ty));
+    const tiles = await Promise.all(jobs);
+    const raw = new Float32Array(N);
+    tiles.forEach((d, k) => {
+      const ox = (k % nx) * 256, oy = Math.floor(k / nx) * 256;
+      for (let y = 0; y < 256; y++) for (let x = 0; x < 256; x++) {
+        const i = (y * 256 + x) * 4;
+        raw[(oy + y) * W + ox + x] = d[i] * 256 + d[i + 1] + d[i + 2] / 256 - 32768;
+      }
+    });
+    // one light 3×3 smoothing pass: quiets noise but keeps small spurs and gullies
+    const Z = new Float32Array(N);
+    for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+      let s = 0, n = 0;
+      for (let dy = -1; dy <= 1; dy++) { const yy = y + dy; if (yy < 0 || yy >= H) continue;
+        for (let dx = -1; dx <= 1; dx++) { const xx = x + dx; if (xx < 0 || xx >= W) continue; s += raw[yy * W + xx]; n++; } }
+      Z[y * W + x] = s / n;
+    }
+    const px = 156543.03392 * Math.cos(r.lat * Math.PI / 180) / 2 ** r.zc;
+    gridCache = { key: r.key, Z, W, H, N, zc: r.zc, tx0: r.tx0, ty0: r.ty0, px, cellArea: px * px };
+    return gridCache;
+  }
+
+  const DX8 = [-1, 0, 1, -1, 1, -1, 0, 1], DY8 = [-1, -1, -1, 0, 0, 1, 1, 1];
+  const DD8 = [Math.SQRT2, 1, Math.SQRT2, 1, 1, Math.SQRT2, 1, Math.SQRT2];
+
+  function sortAscending(V, N) { // counting sort of cell indices by value
+    let lo = Infinity, hi = -Infinity;
+    for (let i = 0; i < N; i++) { if (V[i] < lo) lo = V[i]; if (V[i] > hi) hi = V[i]; }
+    const step = Math.max(1e-4, (hi - lo) / 600000);
+    const nb = Math.floor((hi - lo) / step) + 1;
+    const counts = new Uint32Array(nb + 1), bucket = new Uint32Array(N), order = new Uint32Array(N);
+    for (let i = 0; i < N; i++) { const q = Math.floor((V[i] - lo) / step); bucket[i] = q; counts[q + 1]++; }
+    for (let q = 0; q < nb; q++) counts[q + 1] += counts[q];
+    for (let i = 0; i < N; i++) order[counts[bucket[i]]++] = i;
+    return order;
+  }
+
+  function traceChains(sel, rec, N, minLen) {
+    const donors = new Uint8Array(N), seen = new Uint8Array(N), chains = [];
+    for (let i = 0; i < N; i++) if (sel[i] && rec[i] >= 0 && sel[rec[i]]) donors[rec[i]]++;
+    for (let i = 0; i < N; i++) {
+      if (!sel[i] || donors[i] || seen[i]) continue;
+      const chain = [i]; seen[i] = 1;
+      let j = rec[i];
+      while (j >= 0 && sel[j]) { chain.push(j); if (seen[j]) break; seen[j] = 1; j = rec[j]; }
+      if (chain.length >= minLen) chains.push(chain);
+    }
+    return chains;
+  }
+
+  function smoothPts(pts) {
+    if (pts.length < 3) return pts;
+    // moving average (window 5) to remove the grid staircase, then two rounds of Chaikin
+    let a = pts.map((p, k) => {
+      if (k === 0 || k === pts.length - 1) return p;
+      let sx = 0, sy = 0, n = 0;
+      for (let m = Math.max(0, k - 2); m <= Math.min(pts.length - 1, k + 2); m++) { sx += pts[m][0]; sy += pts[m][1]; n++; }
+      return [sx / n, sy / n];
+    });
+    for (let r = 0; r < 2; r++) {
+      const out = [a[0]];
+      for (let k = 0; k < a.length - 1; k++) {
+        const [ax, ay] = a[k], [bx, by] = a[k + 1];
+        out.push([ax * 0.75 + bx * 0.25, ay * 0.75 + by * 0.25], [ax * 0.25 + bx * 0.75, ay * 0.25 + by * 0.75]);
+      }
+      out.push(a[a.length - 1]);
+      a = out;
+    }
+    return a;
+  }
+
+  // chains → short line pieces, each with a strength value s = log10(contributing area in m²),
+  // so width and colour change gradually along a line instead of jumping between classes
+  function chainsToFeatures(chains, S, g, pieceLen) {
+    const worldPx = 256 * 2 ** g.zc;
+    const toLngLat = ([gx, gy]) => [gx / worldPx * 360 - 180, Math.atan(Math.sinh(Math.PI * (1 - 2 * gy / worldPx))) * 180 / Math.PI];
+    const feats = [];
+    for (const chain of chains) {
+      const pts = chain.map((i) => [g.tx0 * 256 + (i % g.W) + 0.5, g.ty0 * 256 + Math.floor(i / g.W) + 0.5]);
+      const sm = smoothPts(pts).map(toLngLat);
+      const f = (sm.length - 1) / (chain.length - 1);
+      for (let st = 0; st < chain.length - 1; st += pieceLen) {
+        const en = Math.min(chain.length - 1, st + pieceLen);
+        let s = 0;
+        for (let k = st; k <= en; k++) s += S[chain[k]];
+        feats.push({ type: 'Feature', properties: { s: s / (en - st + 1) },
+          geometry: { type: 'LineString', coordinates: sm.slice(Math.round(st * f), Math.round(en * f) + 1) } });
+      }
+    }
+    return feats;
+  }
+
+  function tpiFn(g) {
+    const { Z, W, H } = g;
+    const R = Math.max(3, Math.min(12, Math.round(200 / g.px)));
+    const S = new Float64Array((W + 1) * (H + 1));
+    for (let y = 0; y < H; y++) { let row = 0; for (let x = 0; x < W; x++) { row += Z[y * W + x]; S[(y + 1) * (W + 1) + x + 1] = S[y * (W + 1) + x + 1] + row; } }
+    return (x, y) => {
+      const x0 = Math.max(0, x - R), x1 = Math.min(W, x + R + 1), y0 = Math.max(0, y - R), y1 = Math.min(H, y + R + 1);
+      const sum = S[y1 * (W + 1) + x1] - S[y0 * (W + 1) + x1] - S[y1 * (W + 1) + x0] + S[y0 * (W + 1) + x0];
+      return Z[y * W + x] - sum / ((x1 - x0) * (y1 - y0));
+    };
+  }
+
+  function computeRidges(g, detail) {
+    const { Z, W, H, N } = g;
+    const rec = new Int32Array(N).fill(-1);
+    for (let y = 1; y < H - 1; y++) for (let x = 1; x < W - 1; x++) {
+      const i = y * W + x, z = Z[i];
+      let best = 0, bi = -1;
+      for (let k = 0; k < 8; k++) { const j = (y + DY8[k]) * W + x + DX8[k]; const s = (Z[j] - z) / DD8[k]; if (s > best) { best = s; bi = j; } }
+      rec[i] = bi;
+    }
+    const order = sortAscending(Z, N);
+    const acc = new Float32Array(N).fill(1), len = new Float32Array(N).fill(1);
+    for (let k = 0; k < N; k++) {
+      const i = order[k], r = rec[i];
+      if (r >= 0) { acc[r] += acc[i]; if (len[i] + 1 > len[r]) len[r] = len[i] + 1; }
+    }
+    const th = RIDGE_DETAIL[detail], tpi = tpiFn(g);
+    const minCells = Math.max(10, th.area / g.cellArea);
+    const sel = new Uint8Array(N);
+    for (let y = 2; y < H - 2; y++) for (let x = 2; x < W - 2; x++) {
+      const i = y * W + x;
+      if (acc[i] >= minCells && acc[i] >= 3 * len[i] && tpi(x, y) >= th.tpi) sel[i] = 1;
+    }
+    // close gaps: where a spur stops (often at a saddle or a flat shoulder), follow it uphill
+    // and keep the path if it reaches another ridge line within ~50 cells
+    for (let i = 0; i < N; i++) {
+      if (sel[i] !== 1 || rec[i] < 0 || sel[rec[i]]) continue;
+      const path = [];
+      let j = rec[i];
+      while (j >= 0 && !sel[j] && path.length < 50) { path.push(j); j = rec[j]; }
+      if (j >= 0 && sel[j]) path.forEach((p) => { sel[p] = 2; });
+    }
+    const S = new Float32Array(N);
+    for (let i = 0; i < N; i++) S[i] = Math.log10(acc[i] * g.cellArea);
+    return chainsToFeatures(traceChains(sel, rec, N, 4), S, g, 6);
+  }
+
+  function priorityFlood(Z, W, H) { // fills pits so water can always find a way out
+    const N = W * H, F = new Float64Array(N), closed = new Uint8Array(N);
+    const hi = new Int32Array(N), hk = new Float64Array(N);
+    let n = 0;
+    const push = (i, k) => {
+      let p = n++;
+      while (p > 0) { const q = (p - 1) >> 1; if (hk[q] <= k) break; hi[p] = hi[q]; hk[p] = hk[q]; p = q; }
+      hi[p] = i; hk[p] = k;
+    };
+    const pop = () => {
+      const top = hi[0]; n--;
+      if (n > 0) {
+        const i = hi[n], k = hk[n];
+        let p = 0;
+        for (;;) {
+          let c = 2 * p + 1;
+          if (c >= n) break;
+          if (c + 1 < n && hk[c + 1] < hk[c]) c++;
+          if (hk[c] >= k) break;
+          hi[p] = hi[c]; hk[p] = hk[c]; p = c;
+        }
+        hi[p] = i; hk[p] = k;
+      }
+      return top;
+    };
+    for (let x = 0; x < W; x++) for (const y of [0, H - 1]) { const i = y * W + x; if (!closed[i]) { closed[i] = 1; F[i] = Z[i]; push(i, F[i]); } }
+    for (let y = 0; y < H; y++) for (const x of [0, W - 1]) { const i = y * W + x; if (!closed[i]) { closed[i] = 1; F[i] = Z[i]; push(i, F[i]); } }
+    while (n > 0) {
+      const c = pop(), fc = F[c], x = c % W, y = (c / W) | 0;
+      for (let k = 0; k < 8; k++) {
+        const xx = x + DX8[k], yy = y + DY8[k];
+        if (xx < 0 || yy < 0 || xx >= W || yy >= H) continue;
+        const j = yy * W + xx;
+        if (closed[j]) continue;
+        closed[j] = 1;
+        F[j] = Math.max(Z[j], fc + 1e-3);
+        push(j, F[j]);
+      }
+    }
+    return F;
+  }
+
+  function computeChannels(g, detail) {
+    const { Z, W, H, N } = g;
+    const F = priorityFlood(Z, W, H);
+    const rec = new Int32Array(N).fill(-1);
+    for (let y = 1; y < H - 1; y++) for (let x = 1; x < W - 1; x++) {
+      const i = y * W + x, f = F[i];
+      let best = 0, bi = -1;
+      for (let k = 0; k < 8; k++) { const j = (y + DY8[k]) * W + x + DX8[k]; const s = (f - F[j]) / DD8[k]; if (s > best) { best = s; bi = j; } }
+      rec[i] = bi;
+    }
+    const order = sortAscending(F, N);
+    const acc = new Float32Array(N).fill(1), len = new Float32Array(N).fill(1);
+    for (let k = N - 1; k >= 0; k--) {
+      const i = order[k], r = rec[i];
+      if (r >= 0) { acc[r] += acc[i]; if (len[i] + 1 > len[r]) len[r] = len[i] + 1; }
+    }
+    const minCells = Math.max(15, CHANNEL_DETAIL[detail].area / g.cellArea);
+    const sel = new Uint8Array(N);
+    for (let y = 2; y < H - 2; y++) for (let x = 2; x < W - 2; x++) {
+      const i = y * W + x;
+      // skip cells inside filled pits: there the "channel" is only an artefact of the filling
+      if (acc[i] >= minCells && acc[i] >= 3 * len[i] && F[i] - Z[i] < 1) sel[i] = 1;
+    }
+    const S = new Float32Array(N);
+    for (let i = 0; i < N; i++) S[i] = Math.log10(acc[i] * g.cellArea);
+    return chainsToFeatures(traceChains(sel, rec, N, 5), S, g, 6);
+  }
+
+  async function runAnalysis(force) {
+    const wantR = $('tRidges').checked, wantC = $('tChannels').checked;
+    if ((!wantR && !wantC) || !map.getSource('ridges')) return;
+    const r = analysisRange();
+    if (!r) {
+      if (wantR) $('ridgeStatus').textContent = 'התקרבו עוד קצת כדי לחשב קווי רכס ושלוחות.';
+      if (wantC) $('channelStatus').textContent = 'התקרבו עוד קצת כדי לחשב ערוצים.';
+      return;
+    }
+    const rk = r.key + '/' + $('ridgeDetail').value, ck = r.key + '/' + $('channelDetail').value;
+    const doR = wantR && (force || rk !== ridgeKey), doC = wantC && (force || ck !== channelKey);
+    if (!doR && !doC) return;
+    const seq = ++analysisSeq;
+    if (doR) $('ridgeStatus').textContent = 'מחשב קווי רכס ושלוחות…';
+    if (doC) $('channelStatus').textContent = 'מחשב ערוצים…';
+    let g;
+    try { g = await getGrid(r); }
+    catch {
+      if (seq === analysisSeq) ['ridgeStatus', 'channelStatus'].forEach((id) => { $(id).textContent = 'נתוני הגובה לא נטענו. נסו להזיז קצת את המפה.'; });
+      return;
+    }
+    if (seq !== analysisSeq) return;
+    await new Promise((res) => setTimeout(res, 30)); // let the status text paint before the heavy part
+    if (doR) {
+      const feats = computeRidges(g, $('ridgeDetail').value);
+      if (seq !== analysisSeq) return;
+      map.getSource('ridges').setData({ type: 'FeatureCollection', features: feats });
+      ridgeKey = rk;
+      $('ridgeStatus').textContent = feats.length
+        ? 'מחושב לאזור שעל המסך ומתעדכן כשמזיזים את המפה.'
+        : 'לא נמצאו רכסים בולטים באזור הזה. השטח כנראה מישורי מדי.';
+      await new Promise((res) => setTimeout(res, 0));
+    }
+    if (doC && seq === analysisSeq) {
+      const feats = computeChannels(g, $('channelDetail').value);
+      if (seq !== analysisSeq) return;
+      map.getSource('channels').setData({ type: 'FeatureCollection', features: feats });
+      channelKey = ck;
+      $('channelStatus').textContent = 'ערוצים שנמצאו מנתוני הגובה. החצים מראים את כיוון הזרימה.';
+    }
+  }
+
+  function applyRidgeVisibility() {
+    if (!map.getLayer('ridges-line')) return;
+    const on = $('tRidges').checked;
+    ['ridges-casing', 'ridges-line'].forEach((l) => map.setLayoutProperty(l, 'visibility', on ? 'visible' : 'none'));
+    if (on) runAnalysis(false); else $('ridgeStatus').textContent = 'מחושב מנתוני הגובה לאזור שעל המסך.';
+  }
+  function applyChannelVisibility() {
+    if (!map.getLayer('channels-line')) return;
+    const on = $('tChannels').checked;
+    ['channels-line', 'channels-arrows'].forEach((l) => map.setLayoutProperty(l, 'visibility', on ? 'visible' : 'none'));
+    if (on) runAnalysis(false); else $('channelStatus').textContent = 'משלים נחלים שחסרים במפה, לפי צורת השטח.';
+  }
+  $('tRidges').addEventListener('change', applyRidgeVisibility);
+  $('tChannels').addEventListener('change', applyChannelVisibility);
+  $('ridgeDetail').addEventListener('change', () => runAnalysis(false));
+  $('channelDetail').addEventListener('change', () => runAnalysis(false));
+  let analysisTimer;
+  map.on('moveend', () => { clearTimeout(analysisTimer); analysisTimer = setTimeout(() => runAnalysis(false), 700); });
+
+  // ---------- map ready ----------
+  map.on('load', () => {
+    addTerrainAnalysisLayers();
+    addStreamLayers();
+    map.addSource('profile', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
+    map.addLayer({ id: 'profile-casing', type: 'line', source: 'profile', paint: { 'line-color': '#ffffff', 'line-width': 6, 'line-opacity': 0.9 } });
+    map.addLayer({ id: 'profile-line', type: 'line', source: 'profile', paint: { 'line-color': '#2C6A87', 'line-width': 3 } });
+    contourColorsFor(currentBase);
+    addLosLayers();
+    applyStreamVisibility();
+    applyRidgeVisibility();
+    applyChannelVisibility();
+  });
+
+  // ---------- mobile sheet ----------
+  const panel = $('panel');
+  $('fab').addEventListener('click', () => panel.classList.add('open'));
+  function closeSheetOnMobile() { if (window.innerWidth <= 760) panel.classList.remove('open'); }
+  map.on('dragstart', closeSheetOnMobile);
+})();
+</script>
+</body>
+</html>
